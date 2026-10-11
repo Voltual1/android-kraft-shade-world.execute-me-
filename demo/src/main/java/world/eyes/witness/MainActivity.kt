@@ -30,6 +30,7 @@ import world.eyes.witness.director.SceneType
 import world.eyes.witness.timeline.LrcLine
 import world.eyes.witness.timeline.LrcParser
 import world.eyes.witness.timeline.TimelineSnapshot
+import world.eyes.witness.ui.stage.AlgebraicLoveStage
 import world.eyes.witness.ui.stage.ArgumentStackStage
 import world.eyes.witness.ui.stage.BiologyExistenceStage
 import world.eyes.witness.ui.stage.BootSequenceStage
@@ -189,6 +190,13 @@ fun WorldExecuteMeStage(audioPlayer: MvAudioPlayer) {
             }
             SceneType.DESPERATE_EXECUTION -> {
                 DesperateExecutionStage(
+                    sceneState = sceneState,
+                    snapshot = snapshot,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            SceneType.ALGEBRAIC_LOVE -> {
+                AlgebraicLoveStage(
                     sceneState = sceneState,
                     snapshot = snapshot,
                     modifier = Modifier.fillMaxSize()
