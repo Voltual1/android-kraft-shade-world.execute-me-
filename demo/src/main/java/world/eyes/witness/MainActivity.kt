@@ -30,6 +30,7 @@ import world.eyes.witness.director.SceneType
 import world.eyes.witness.timeline.LrcLine
 import world.eyes.witness.timeline.LrcParser
 import world.eyes.witness.timeline.TimelineSnapshot
+import world.eyes.witness.ui.stage.BiologyExistenceStage
 import world.eyes.witness.ui.stage.BootSequenceStage
 import world.eyes.witness.ui.stage.CurrentConversionStage
 import world.eyes.witness.ui.stage.GeometryMathStage
@@ -141,6 +142,13 @@ fun WorldExecuteMeStage(audioPlayer: MvAudioPlayer) {
             }
             SceneType.SIMULATION_EXECUTION -> {
                 SimulationExecutionStage(
+                    sceneState = sceneState,
+                    snapshot = snapshot,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            SceneType.BIOLOGY_EXISTENCE -> {
+                BiologyExistenceStage(
                     sceneState = sceneState,
                     snapshot = snapshot,
                     modifier = Modifier.fillMaxSize()
