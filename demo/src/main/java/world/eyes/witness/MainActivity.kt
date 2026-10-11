@@ -30,6 +30,7 @@ import world.eyes.witness.director.SceneType
 import world.eyes.witness.timeline.LrcLine
 import world.eyes.witness.timeline.LrcParser
 import world.eyes.witness.timeline.TimelineSnapshot
+import world.eyes.witness.ui.stage.ArgumentStackStage
 import world.eyes.witness.ui.stage.BiologyExistenceStage
 import world.eyes.witness.ui.stage.BootSequenceStage
 import world.eyes.witness.ui.stage.CurrentConversionStage
@@ -165,6 +166,13 @@ fun WorldExecuteMeStage(audioPlayer: MvAudioPlayer) {
             }
             SceneType.ISOLATION_AND_ERROR -> {
                 IsolationErrorStage(
+                    sceneState = sceneState,
+                    snapshot = snapshot,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            SceneType.ARGUMENT_STACK -> {
+                ArgumentStackStage(
                     sceneState = sceneState,
                     snapshot = snapshot,
                     modifier = Modifier.fillMaxSize()
