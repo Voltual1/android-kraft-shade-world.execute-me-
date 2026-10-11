@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import world.eyes.witness.audio.MvAudioPlayer
 import world.eyes.witness.director.SceneDirector
@@ -114,7 +115,6 @@ fun WorldExecuteMeStage(audioPlayer: MvAudioPlayer) {
                 )
             }
             else -> {
-                // 后续场景占位显示
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
