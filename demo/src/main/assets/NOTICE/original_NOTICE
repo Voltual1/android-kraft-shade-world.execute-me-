@@ -1,0 +1,28 @@
+NOTICE
+
+本项目中包含的以下文件来源于第三方仓库，并保留其原始版权声明：
+
+1. 音频文件
+   - 文件名：Mili - world.execute (me) ;.mp3
+   - 来源仓库：https://github.com/Sy2RK/DeepSeek-V4-1-Flash-world.execute-me-
+   - 原始版权：© Mili。版权归 Mili 所有。
+
+2. 歌词时间轴文件（LRC）
+   - 文件名：world.execute(me)-timeline.lrc
+   - 来源仓库：https://github.com/Sy2RK/DeepSeek-V4-1-Flash-world.execute-me-
+   - 原始版权：歌词及时间轴版权归 Mili 所有。
+
+3. （如适用）MIDI 文件
+   - 文件名：world.execute (me) ;.mid
+   - 来源仓库：同上
+   - 原始版权：归 Mili 所有。
+
+上述音频、MIDI 与 LRC 文件仅被上述来源仓库为演示目的收录，并未被重新授权。
+本项目中的使用同样不改变其原始版权归属。
+
+该来源仓库的其余原创部分（动画、渲染引擎、工具链等）采用 MIT License，
+版权归属 Zhengyi Shen (Copyright (c) 2026 Zhengyi Shen)。
+详见：https://github.com/Sy2RK/DeepSeek-V4-1-Flash-world.execute-me-/blob/main/LICENSE
+
+本项目与 Mili 无任何官方隶属关系。
+如需对音频或歌词进行进一步使用、分发或商业用途，请自行确认并获得 Mili 的授权。
