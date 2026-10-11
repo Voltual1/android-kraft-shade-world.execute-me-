@@ -40,6 +40,7 @@ import world.eyes.witness.ui.stage.GenderRolesStage
 import world.eyes.witness.ui.stage.GeometryMathStage
 import world.eyes.witness.ui.stage.IsolationErrorStage
 import world.eyes.witness.ui.stage.RapidExecutionStage
+import world.eyes.witness.ui.stage.ShutdownStage
 import world.eyes.witness.ui.stage.SimulationExecutionStage
 import world.eyes.witness.ui.stage.WorldBootStage
 import world.eyes.witness.ui.theme.KraftShadeTheme
@@ -202,18 +203,12 @@ fun WorldExecuteMeStage(audioPlayer: MvAudioPlayer) {
                     modifier = Modifier.fillMaxSize()
                 )
             }
-            else -> {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "[ ${sceneState.scene.title} ]\n${snapshot.currentLine?.text ?: ""}",
-                        color = Color.White,
-                        fontFamily = MvFonts.CodeBold,
-                        fontSize = 20.sp
-                    )
-                }
+            SceneType.OPEN_LOOP_SHUTDOWN -> {
+                ShutdownStage(
+                    sceneState = sceneState,
+                    snapshot = snapshot,
+                    modifier = Modifier.fillMaxSize()
+                )
             }
         }
 
