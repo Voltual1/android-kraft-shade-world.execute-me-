@@ -37,6 +37,7 @@ import world.eyes.witness.ui.stage.CurrentConversionStage
 import world.eyes.witness.ui.stage.GenderRolesStage
 import world.eyes.witness.ui.stage.GeometryMathStage
 import world.eyes.witness.ui.stage.IsolationErrorStage
+import world.eyes.witness.ui.stage.RapidExecutionStage
 import world.eyes.witness.ui.stage.SimulationExecutionStage
 import world.eyes.witness.ui.stage.WorldBootStage
 import world.eyes.witness.ui.theme.KraftShadeTheme
@@ -173,6 +174,13 @@ fun WorldExecuteMeStage(audioPlayer: MvAudioPlayer) {
             }
             SceneType.ARGUMENT_STACK -> {
                 ArgumentStackStage(
+                    sceneState = sceneState,
+                    snapshot = snapshot,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            SceneType.RAPID_EXECUTION_STORM -> {
+                RapidExecutionStage(
                     sceneState = sceneState,
                     snapshot = snapshot,
                     modifier = Modifier.fillMaxSize()
