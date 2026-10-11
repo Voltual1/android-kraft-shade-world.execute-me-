@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.cardinalblue.kraftshade.demo"
+    namespace = "world.eyes.witness"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.cardinalblue.kraftshade.demo"
+        applicationId = "world.eyes.witness"
         minSdk = 24
         targetSdk = 35
         versionCode = 1
