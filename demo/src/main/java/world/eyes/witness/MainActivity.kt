@@ -31,6 +31,7 @@ import world.eyes.witness.timeline.LrcLine
 import world.eyes.witness.timeline.LrcParser
 import world.eyes.witness.timeline.TimelineSnapshot
 import world.eyes.witness.ui.stage.BootSequenceStage
+import world.eyes.witness.ui.stage.GeometryMathStage
 import world.eyes.witness.ui.stage.WorldBootStage
 import world.eyes.witness.ui.theme.KraftShadeTheme
 import world.eyes.witness.ui.theme.MvFonts
@@ -117,6 +118,13 @@ fun WorldExecuteMeStage(audioPlayer: MvAudioPlayer) {
             }
             SceneType.WORLD_BOOT_INSTRUMENTAL -> {
                 WorldBootStage(
+                    sceneState = sceneState,
+                    snapshot = snapshot,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            SceneType.GEOMETRY_MATH -> {
+                GeometryMathStage(
                     sceneState = sceneState,
                     snapshot = snapshot,
                     modifier = Modifier.fillMaxSize()
