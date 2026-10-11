@@ -33,6 +33,7 @@ import world.eyes.witness.timeline.TimelineSnapshot
 import world.eyes.witness.ui.stage.BiologyExistenceStage
 import world.eyes.witness.ui.stage.BootSequenceStage
 import world.eyes.witness.ui.stage.CurrentConversionStage
+import world.eyes.witness.ui.stage.GenderRolesStage
 import world.eyes.witness.ui.stage.GeometryMathStage
 import world.eyes.witness.ui.stage.SimulationExecutionStage
 import world.eyes.witness.ui.stage.WorldBootStage
@@ -149,6 +150,13 @@ fun WorldExecuteMeStage(audioPlayer: MvAudioPlayer) {
             }
             SceneType.BIOLOGY_EXISTENCE -> {
                 BiologyExistenceStage(
+                    sceneState = sceneState,
+                    snapshot = snapshot,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            SceneType.GENDER_AND_ROLES -> {
+                GenderRolesStage(
                     sceneState = sceneState,
                     snapshot = snapshot,
                     modifier = Modifier.fillMaxSize()
