@@ -35,6 +35,7 @@ import world.eyes.witness.ui.stage.BootSequenceStage
 import world.eyes.witness.ui.stage.CurrentConversionStage
 import world.eyes.witness.ui.stage.GenderRolesStage
 import world.eyes.witness.ui.stage.GeometryMathStage
+import world.eyes.witness.ui.stage.IsolationErrorStage
 import world.eyes.witness.ui.stage.SimulationExecutionStage
 import world.eyes.witness.ui.stage.WorldBootStage
 import world.eyes.witness.ui.theme.KraftShadeTheme
@@ -157,6 +158,13 @@ fun WorldExecuteMeStage(audioPlayer: MvAudioPlayer) {
             }
             SceneType.GENDER_AND_ROLES -> {
                 GenderRolesStage(
+                    sceneState = sceneState,
+                    snapshot = snapshot,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            SceneType.ISOLATION_AND_ERROR -> {
+                IsolationErrorStage(
                     sceneState = sceneState,
                     snapshot = snapshot,
                     modifier = Modifier.fillMaxSize()
