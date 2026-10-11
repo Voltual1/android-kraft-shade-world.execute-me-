@@ -34,6 +34,7 @@ import world.eyes.witness.ui.stage.ArgumentStackStage
 import world.eyes.witness.ui.stage.BiologyExistenceStage
 import world.eyes.witness.ui.stage.BootSequenceStage
 import world.eyes.witness.ui.stage.CurrentConversionStage
+import world.eyes.witness.ui.stage.DesperateExecutionStage
 import world.eyes.witness.ui.stage.GenderRolesStage
 import world.eyes.witness.ui.stage.GeometryMathStage
 import world.eyes.witness.ui.stage.IsolationErrorStage
@@ -181,6 +182,13 @@ fun WorldExecuteMeStage(audioPlayer: MvAudioPlayer) {
             }
             SceneType.RAPID_EXECUTION_STORM -> {
                 RapidExecutionStage(
+                    sceneState = sceneState,
+                    snapshot = snapshot,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            SceneType.DESPERATE_EXECUTION -> {
+                DesperateExecutionStage(
                     sceneState = sceneState,
                     snapshot = snapshot,
                     modifier = Modifier.fillMaxSize()
