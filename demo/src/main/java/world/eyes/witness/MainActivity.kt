@@ -54,6 +54,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 保持屏幕常亮，防止观赏 MV 过程中因超时自动休眠
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
         enableEdgeToEdge()
         applyImmersiveMode()
 
@@ -129,7 +132,6 @@ fun WorldExecuteMeStage(audioPlayer: MvAudioPlayer) {
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // 底层各分镜内容与 Shader 渲染
         when (sceneState.scene) {
             SceneType.BOOT_SEQUENCE -> {
                 BootSequenceStage(
@@ -224,7 +226,7 @@ fun WorldExecuteMeStage(audioPlayer: MvAudioPlayer) {
             }
         }
 
-        // 最顶层：触控轨迹跟随 Canvas（划动留光，短触切换播放/暂停）
+        // 最顶层：触控轨迹跟随 Canvas
         TouchTrailCanvas(
             onTap = {
                 if (isPlaying) {
