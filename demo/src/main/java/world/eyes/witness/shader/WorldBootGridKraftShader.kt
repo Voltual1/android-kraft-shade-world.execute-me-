@@ -37,7 +37,7 @@ uniform float uProgress;
 void main() {
     // 归一化中心坐标 (-1.0 ~ 1.0)
     vec2 p = (textureCoordinate * 2.0 - 1.0);
-    p.y = -p.y; // 翻转 Y 轴匹配 OpenGL 向上方向
+    p.y = -p.y;
 
     vec3 finalColor = vec3(0.01, 0.02, 0.03);
 
@@ -46,14 +46,17 @@ void main() {
 
     if (p.y < horizon) {
         // 3D 透视地面投影
-        float depth = 1.0 / (horizon - p.y);
+        float depth = 1.0 / max(horizon - p.y, 0.001);
         float forwardSpeed = uTime * 3.5;
 
         vec2 gridPos = vec2(p.x * depth * 1.5, depth + forwardSpeed);
 
-        // 网格线抗锯齿计算
-        vec2 grid = abs(fract(gridPos - 0.5) - 0.5) / fwidth(gridPos);
-        float line = 1.0 - min(min(grid.x, grid.y), 1.0);
+        // 兼容 GLES 2.0 的抗锯齿网格计算（替代 fwidth）
+        vec2 gridFract = abs(fract(gridPos - 0.5) - 0.5);
+        float lineWidth = clamp(0.06 * (depth * 0.08 + 1.0), 0.03, 0.25);
+        float lineX = smoothstep(lineWidth, 0.0, gridFract.x);
+        float lineY = smoothstep(lineWidth, 0.0, gridFract.y);
+        float line = max(lineX, lineY);
 
         // 钢琴重音脉冲产生网格辉光加成
         float pulseGlow = uBeatPulse * 0.45;
@@ -69,7 +72,7 @@ void main() {
     } else {
         // 天空背景与星芒/数据粒子
         float skyY = p.y - horizon;
-        finalColor += vec3(0.02, 0.06, 0.1) * (1.0 - skyY * 1.2);
+        finalColor += vec3(0.02, 0.06, 0.1) * max(1.0 - skyY * 1.2, 0.0);
 
         // 天际线发光条
         float horizonGlow = smoothstep(0.06, 0.0, abs(skyY));
@@ -85,14 +88,14 @@ void main() {
     // 全息准星 (Crosshair)
     float crosshairDist = length(p);
     float ring = abs(crosshairDist - 0.35);
-    if (ring < 0.004) {
+    if (ring < 0.005) {
         finalColor += vec3(0.0, 1.0, 0.8) * 0.6;
     }
 
     // 细微暗角
     vec2 uv = textureCoordinate;
     float vignette = uv.x * uv.y * (1.0 - uv.x) * (1.0 - uv.y);
-    vignette = clamp(pow(16.0 * vignette, 0.25), 0.0, 1.0);
+    vignette = clamp(pow(16.0 * max(vignette, 0.0), 0.25), 0.0, 1.0);
     finalColor *= vignette;
 
     gl_FragColor = vec4(finalColor, 1.0);
