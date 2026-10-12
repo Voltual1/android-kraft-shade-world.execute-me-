@@ -3,10 +3,8 @@ package world.eyes.witness.ui.stage
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -38,13 +36,17 @@ fun KineticStageOverlay(
     snapshot: TimelineSnapshot,
     modifier: Modifier = Modifier
 ) {
-    val currentText = snapshot.currentLine?.text ?: ""
-    val nextText = snapshot.nextLine?.text ?: ""
+    val rawCurrentText = snapshot.currentLine?.text ?: ""
+    val rawNextText = snapshot.nextLine?.text ?: ""
 
-    // 动力学缩放与位移动画
+    // 过滤时间轴括号注释（间奏、开场与结尾），不作为大歌词显示
+    val isComment = rawCurrentText.startsWith("(") && rawCurrentText.endsWith(")")
+    val currentText = if (isComment) "" else rawCurrentText
+    val nextText = if (rawNextText.startsWith("(") && rawNextText.endsWith(")")) "" else rawNextText
+
     val scaleAnim = remember { Animatable(1f) }
     val alphaAnim = remember { Animatable(1f) }
-    val shakeAnim = remember { Animatable(0f) }
+    val transYAnim = remember { Animatable(0f) }
 
     val isImpactWord = currentText in listOf(
         "PROTECTION", "OBJECT CREATION", "INITIALIZATION", "SIMULATION",
@@ -54,75 +56,103 @@ fun KineticStageOverlay(
     ) || currentText.contains("EXECUTION")
 
     LaunchedEffect(currentText) {
-        if (isImpactWord) {
-            scaleAnim.snapTo(1.6f)
-            scaleAnim.animateTo(1.0f, tween(260, easing = FastOutSlowInEasing))
-            alphaAnim.snapTo(0.4f)
-            alphaAnim.animateTo(1.0f, tween(180))
-            shakeAnim.snapTo(12f)
-            shakeAnim.animateTo(0f, tween(220))
-        } else {
-            scaleAnim.snapTo(1.15f)
-            scaleAnim.animateTo(1.0f, tween(200))
-            alphaAnim.snapTo(0.7f)
-            alphaAnim.animateTo(1.0f, tween(150))
-            shakeAnim.snapTo(0f)
+        if (currentText.isNotEmpty()) {
+            if (isImpactWord) {
+                scaleAnim.snapTo(1.65f)
+                scaleAnim.animateTo(1.0f, tween(240, easing = FastOutSlowInEasing))
+                transYAnim.snapTo(18f)
+                transYAnim.animateTo(0f, tween(200))
+                alphaAnim.snapTo(0.3f)
+                alphaAnim.animateTo(1.0f, tween(160))
+            } else {
+                scaleAnim.snapTo(1.15f)
+                scaleAnim.animateTo(1.0f, tween(180))
+                transYAnim.snapTo(-10f)
+                transYAnim.animateTo(0f, tween(180))
+                alphaAnim.snapTo(0.6f)
+                alphaAnim.animateTo(1.0f, tween(150))
+            }
         }
     }
 
-    Box(
-        modifier = modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        // 1. 全屏背景动态代码流水（不再固定在底部方框，而是以低透明度融入画面流动）
+    // 根据歌词行号与场景，自适应动态位置锚点（打破永远定死在中心的呆板）
+    val alignment = when {
+        isImpactWord -> Alignment.Center
+        snapshot.currentLineIndex % 3 == 0 -> Alignment.CenterStart
+        snapshot.currentLineIndex % 3 == 1 -> Alignment.CenterEnd
+        else -> Alignment.Center
+    }
+
+    Box(modifier = modifier.fillMaxSize()) {
+        // 1. 全屏动态背景代码流动层
         BackgroundStreamingCode(sceneState = sceneState)
 
-        // 2. 核心主歌词：动力学全屏排版
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier
-                .offset(x = shakeAnim.value.dp)
-                .scale(scaleAnim.value)
-                .alpha(alphaAnim.value)
-                .padding(horizontal = 24.dp)
-        ) {
-            if (isImpactWord) {
-                Text(
-                    text = currentText,
-                    color = getImpactColor(sceneState),
-                    fontFamily = MvFonts.DisplayBlack,
-                    fontWeight = FontWeight.Black,
-                    fontSize = if (currentText.length > 12) 36.sp else 46.sp,
-                    letterSpacing = 4.sp,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 52.sp
-                )
-            } else {
-                Text(
-                    text = currentText,
-                    color = Color.White,
-                    fontFamily = MvFonts.CodeBold,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 26.sp,
-                    letterSpacing = 1.sp,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 34.sp
-                )
-            }
+        // 2. 动力学歌词主体（间奏时完全隐藏，保证画面纯净）
+        if (currentText.isNotEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = if (isImpactWord) 20.dp else 40.dp, vertical = 32.dp),
+                contentAlignment = alignment
+            ) {
+                Column(
+                    horizontalAlignment = when (alignment) {
+                        Alignment.CenterStart -> Alignment.Start
+                        Alignment.CenterEnd -> Alignment.End
+                        else -> Alignment.CenterHorizontally
+                    },
+                    modifier = Modifier
+                        .offset(y = transYAnim.value.dp)
+                        .scale(scaleAnim.value)
+                        .alpha(alphaAnim.value)
+                ) {
+                    if (isImpactWord) {
+                        Text(
+                            text = currentText,
+                            color = getImpactColor(sceneState),
+                            fontFamily = MvFonts.DisplayBlack,
+                            fontWeight = FontWeight.Black,
+                            fontSize = if (currentText.length > 12) 38.sp else 48.sp,
+                            letterSpacing = 4.sp,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 52.sp
+                        )
+                    } else {
+                        Text(
+                            text = currentText,
+                            color = Color.White,
+                            fontFamily = MvFonts.CodeBold,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 28.sp,
+                            letterSpacing = 1.sp,
+                            textAlign = when (alignment) {
+                                Alignment.CenterStart -> TextAlign.Start
+                                Alignment.CenterEnd -> TextAlign.End
+                                else -> TextAlign.Center
+                            },
+                            lineHeight = 36.sp
+                        )
+                    }
 
-            if (nextText.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(14.dp))
-                Text(
-                    text = ">> $nextText",
-                    color = Color.White.copy(alpha = 0.35f),
-                    fontFamily = MvFonts.Terminal,
-                    fontSize = 15.sp,
-                    textAlign = TextAlign.Center
-                )
+                    if (nextText.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = ">> $nextText",
+                            color = Color.White.copy(alpha = 0.35f),
+                            fontFamily = MvFonts.Terminal,
+                            fontSize = 15.sp,
+                            textAlign = when (alignment) {
+                                Alignment.CenterStart -> TextAlign.Start
+                                Alignment.CenterEnd -> TextAlign.End
+                                else -> TextAlign.Center
+                            }
+                        )
+                    }
+                }
             }
         }
 
-        // 3. 极简视听标线：仅保留屏幕四角的微型指示，杜绝沉重固定黑条
+        // 3. 四角轻量级微标
         CornerMetadataOverlay(sceneState = sceneState)
     }
 }
@@ -137,7 +167,7 @@ private fun BackgroundStreamingCode(sceneState: SceneState) {
         SceneType.SIMULATION_EXECUTION -> "if (you.getFeelingIndex(\"happy\") != -1) me.requestExecution(world);"
         SceneType.BIOLOGY_EXISTENCE -> "if (world.getGod().equals(me)) me.setProof(you.toProof());"
         SceneType.GENDER_AND_ROLES -> "me.toggleGender(); world.makeHigh(me); me.toggleRoleBDSM();"
-        SceneType.ISOLATION_AND_ERROR -> "world.removeThing(you); // java.lang.IllegalArgumentException: God is always true"
+        SceneType.ISOLATION_AND_ERROR -> "world.removeThing(you); // java.lang.IllegalArgumentException"
         SceneType.ARGUMENT_STACK -> "at goddrinksjava.GodDrinksJava.main(GodDrinksJava.java:112)"
         SceneType.RAPID_EXECUTION_STORM -> "for (int i=0; i<12; i++) world.runExecution();"
         SceneType.DESPERATE_EXECUTION -> "you.setExecution(me.toExecution()); me.escape();"
@@ -145,13 +175,13 @@ private fun BackgroundStreamingCode(sceneState: SceneState) {
         SceneType.OPEN_LOOP_SHUTDOWN -> "world.execute(me); // exit 0"
     }
 
-    // 斜角流动的半透明微光代码流
+    // 动态斜向背景代码瀑布流
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .alpha(0.18f + sceneState.beatPulse * 0.12f)
-            .rotate(-8f)
-            .padding(12.dp),
+            .alpha(0.16f + sceneState.beatPulse * 0.14f)
+            .rotate(-7f)
+            .padding(16.dp),
         contentAlignment = Alignment.BottomStart
     ) {
         Column {
@@ -177,19 +207,17 @@ private fun CornerMetadataOverlay(sceneState: SceneState) {
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // 左上角：微型芯片与状态
         Text(
             text = "SYS::${sceneState.scene.name}",
-            color = Color.White.copy(alpha = 0.45f),
+            color = Color.White.copy(alpha = 0.4f),
             fontFamily = MvFonts.Terminal,
             fontSize = 11.sp,
             modifier = Modifier.align(Alignment.TopStart)
         )
 
-        // 右上角：BPM 与时间微标
         Text(
             text = "${String.format("%.2f", sceneState.globalTimeSeconds)}s / 130BPM",
-            color = Color.White.copy(alpha = 0.45f),
+            color = Color.White.copy(alpha = 0.4f),
             fontFamily = MvFonts.Terminal,
             fontSize = 11.sp,
             modifier = Modifier.align(Alignment.TopEnd)
