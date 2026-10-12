@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -18,7 +17,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -39,7 +37,7 @@ fun KineticStageOverlay(
     val rawCurrentText = snapshot.currentLine?.text ?: ""
     val rawNextText = snapshot.nextLine?.text ?: ""
 
-    // 过滤时间轴括号注释（间奏、开场与结尾），不作为大歌词显示
+    // 过滤时间轴括号注释（间奏、开场与结尾），不作为歌词渲染
     val isComment = rawCurrentText.startsWith("(") && rawCurrentText.endsWith(")")
     val currentText = if (isComment) "" else rawCurrentText
     val nextText = if (rawNextText.startsWith("(") && rawNextText.endsWith(")")) "" else rawNextText
@@ -60,14 +58,14 @@ fun KineticStageOverlay(
             if (isImpactWord) {
                 scaleAnim.snapTo(1.65f)
                 scaleAnim.animateTo(1.0f, tween(240, easing = FastOutSlowInEasing))
-                transYAnim.snapTo(18f)
+                transYAnim.snapTo(16f)
                 transYAnim.animateTo(0f, tween(200))
                 alphaAnim.snapTo(0.3f)
                 alphaAnim.animateTo(1.0f, tween(160))
             } else {
                 scaleAnim.snapTo(1.15f)
                 scaleAnim.animateTo(1.0f, tween(180))
-                transYAnim.snapTo(-10f)
+                transYAnim.snapTo(-8f)
                 transYAnim.animateTo(0f, tween(180))
                 alphaAnim.snapTo(0.6f)
                 alphaAnim.animateTo(1.0f, tween(150))
@@ -75,7 +73,7 @@ fun KineticStageOverlay(
         }
     }
 
-    // 根据歌词行号与场景，自适应动态位置锚点（打破永远定死在中心的呆板）
+    // 根据歌词行号与场景，自适应动态位置锚点（随节拍跳跃位置）
     val alignment = when {
         isImpactWord -> Alignment.Center
         snapshot.currentLineIndex % 3 == 0 -> Alignment.CenterStart
@@ -84,10 +82,7 @@ fun KineticStageOverlay(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
-        // 1. 全屏动态背景代码流动层
-        BackgroundStreamingCode(sceneState = sceneState)
-
-        // 2. 动力学歌词主体（间奏时完全隐藏，保证画面纯净）
+        // 核心动力学单元：歌词与对应的 Java 运行代码紧紧相随
         if (currentText.isNotEmpty()) {
             Box(
                 modifier = Modifier
@@ -106,6 +101,22 @@ fun KineticStageOverlay(
                         .scale(scaleAnim.value)
                         .alpha(alphaAnim.value)
                 ) {
+                    // 1. 紧随歌词顶部的元数据注释 / 方法签名
+                    Text(
+                        text = getCodePrefix(sceneState, currentText),
+                        color = Color.Cyan.copy(alpha = 0.55f + sceneState.beatPulse * 0.3f),
+                        fontFamily = MvFonts.Terminal,
+                        fontSize = 13.sp,
+                        textAlign = when (alignment) {
+                            Alignment.CenterStart -> TextAlign.Start
+                            Alignment.CenterEnd -> TextAlign.End
+                            else -> TextAlign.Center
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // 2. 歌词主文本
                     if (isImpactWord) {
                         Text(
                             text = currentText,
@@ -134,13 +145,31 @@ fun KineticStageOverlay(
                         )
                     }
 
+                    // 3. 紧随歌词底部的对应实装代码（带终端光标感）
+                    val boundCode = getBoundCode(sceneState, currentText)
+                    if (boundCode.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "$boundCode _",
+                            color = Color(0xFF80D8FF).copy(alpha = 0.85f),
+                            fontFamily = MvFonts.CodeRegular,
+                            fontSize = 12.sp,
+                            textAlign = when (alignment) {
+                                Alignment.CenterStart -> TextAlign.Start
+                                Alignment.CenterEnd -> TextAlign.End
+                                else -> TextAlign.Center
+                            }
+                        )
+                    }
+
+                    // 4. 预览下一句词
                     if (nextText.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
                         Text(
                             text = ">> $nextText",
-                            color = Color.White.copy(alpha = 0.35f),
+                            color = Color.White.copy(alpha = 0.3f),
                             fontFamily = MvFonts.Terminal,
-                            fontSize = 15.sp,
+                            fontSize = 14.sp,
                             textAlign = when (alignment) {
                                 Alignment.CenterStart -> TextAlign.Start
                                 Alignment.CenterEnd -> TextAlign.End
@@ -152,51 +181,8 @@ fun KineticStageOverlay(
             }
         }
 
-        // 3. 四角轻量级微标
+        // 轻量级系统状态指示
         CornerMetadataOverlay(sceneState = sceneState)
-    }
-}
-
-@Composable
-private fun BackgroundStreamingCode(sceneState: SceneState) {
-    val codeSnippet = when (sceneState.scene) {
-        SceneType.BOOT_SEQUENCE -> "World world = new World(5); world.addThing(me); world.addThing(you);"
-        SceneType.WORLD_BOOT_INSTRUMENTAL -> "world.startSimulation(); // 3D Perspective Vector Space"
-        SceneType.GEOMETRY_MATH -> "you.addAttribute(me.getDimensions().toAttribute()); me.resetDimentions();"
-        SceneType.CURRENT_CONVERSION -> "me.toggleCurrent(); world.timeTravelForTwo(\"AC\", 617, me, you);"
-        SceneType.SIMULATION_EXECUTION -> "if (you.getFeelingIndex(\"happy\") != -1) me.requestExecution(world);"
-        SceneType.BIOLOGY_EXISTENCE -> "if (world.getGod().equals(me)) me.setProof(you.toProof());"
-        SceneType.GENDER_AND_ROLES -> "me.toggleGender(); world.makeHigh(me); me.toggleRoleBDSM();"
-        SceneType.ISOLATION_AND_ERROR -> "world.removeThing(you); // java.lang.IllegalArgumentException"
-        SceneType.ARGUMENT_STACK -> "at goddrinksjava.GodDrinksJava.main(GodDrinksJava.java:112)"
-        SceneType.RAPID_EXECUTION_STORM -> "for (int i=0; i<12; i++) world.runExecution();"
-        SceneType.DESPERATE_EXECUTION -> "you.setExecution(me.toExecution()); me.escape();"
-        SceneType.ALGEBRAIC_LOVE -> "(x^2 + y^2 - 1)^3 - x^2 * y^3 = 0 // LO-O-OVE"
-        SceneType.OPEN_LOOP_SHUTDOWN -> "world.execute(me); // exit 0"
-    }
-
-    // 动态斜向背景代码瀑布流
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .alpha(0.16f + sceneState.beatPulse * 0.14f)
-            .rotate(-7f)
-            .padding(16.dp),
-        contentAlignment = Alignment.BottomStart
-    ) {
-        Column {
-            repeat(3) {
-                Text(
-                    text = codeSnippet,
-                    color = Color.Cyan,
-                    fontFamily = MvFonts.CodeRegular,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    softWrap = false
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-            }
-        }
     }
 }
 
@@ -209,7 +195,7 @@ private fun CornerMetadataOverlay(sceneState: SceneState) {
     ) {
         Text(
             text = "SYS::${sceneState.scene.name}",
-            color = Color.White.copy(alpha = 0.4f),
+            color = Color.White.copy(alpha = 0.35f),
             fontFamily = MvFonts.Terminal,
             fontSize = 11.sp,
             modifier = Modifier.align(Alignment.TopStart)
@@ -217,11 +203,63 @@ private fun CornerMetadataOverlay(sceneState: SceneState) {
 
         Text(
             text = "${String.format("%.2f", sceneState.globalTimeSeconds)}s / 130BPM",
-            color = Color.White.copy(alpha = 0.4f),
+            color = Color.White.copy(alpha = 0.35f),
             fontFamily = MvFonts.Terminal,
             fontSize = 11.sp,
             modifier = Modifier.align(Alignment.TopEnd)
         )
+    }
+}
+
+private fun getCodePrefix(sceneState: SceneState, currentText: String): String {
+    return when {
+        currentText.contains("EXECUTION") -> "// [CRITICAL] world.runExecution()"
+        currentText.contains("LO-O-OVE") -> "// [MATH_MODEL] algebraic(love)"
+        sceneState.scene == SceneType.GEOMETRY_MATH -> "// [TOPOLOGY] point_set.dimension"
+        sceneState.scene == SceneType.CURRENT_CONVERSION -> "// [POWER] current.convert"
+        sceneState.scene == SceneType.BIOLOGY_EXISTENCE -> "// [BIOLOGY] entity.nutrient"
+        sceneState.scene == SceneType.GENDER_AND_ROLES -> "// [STATE] role.toggle"
+        sceneState.scene == SceneType.ISOLATION_AND_ERROR -> "// [EXCEPTION] null_pointer"
+        else -> "// [EXEC] goddrinksjava.Runtime"
+    }
+}
+
+private fun getBoundCode(sceneState: SceneState, currentText: String): String {
+    return when {
+        currentText.contains("power line") -> "world.startSimulation();"
+        currentText.contains("PROTECTION") -> "you.addAttribute(me.getDimensions().toAttribute());"
+        currentText.contains("OBJECT CREATION") -> "world.addThing(new Lovable(\"Me\"));"
+        currentText.contains("INITIALIZATION") -> "world.addThing(new Lovable(\"You\"));"
+        currentText.contains("SIMULATION") -> "world.startSimulation();"
+        currentText.contains("DIMENSION") -> "you.addAttribute(me.getDimensions().toAttribute());"
+        currentText.contains("CIRCUMFERENCE") -> "you.addAttribute(me.getCircumference().toAttribute());"
+        currentText.contains("TANGENTS") -> "you.addAction(\"sit\", me.getTangent(you.getXPosition()));"
+        currentText.contains("LIMITATIONS") -> "me.setLimit(you.toLimit());"
+        currentText.contains("AC") || currentText.contains("DC") -> "me.toggleCurrent();"
+        currentText.contains("dizzy") -> "me.canSee(false); me.addFeeling(\"dizzy\");"
+        currentText.contains("A.D.") || currentText.contains("B.C.") -> "world.timeTravelForTwo(\"AC\", 617, me, you);"
+        currentText.contains("unite") || currentText.contains("deeply") -> "world.unite(me, you);"
+        currentText.contains("STIMULATIONS") -> "you.setSatisfaction(me.toSatisfaction());"
+        currentText.contains("SATISFACTION") -> "you.setSatisfaction(100);"
+        currentText.contains("happy") || (currentText.contains("EXECUTION") && sceneState.scene == SceneType.SIMULATION_EXECUTION) -> "me.requestExecution(world);"
+        currentText.contains("trapped") -> "world.lockThing(me); world.lockThing(you);"
+        currentText.contains("NUTRIENTS") || currentText.contains("eggplant") -> "you.addAttribute(me.getNutrients().toAttribute());"
+        currentText.contains("ANTIOXIDANTS") || currentText.contains("tomato") -> "you.addAttribute(me.getAntioxidants().toAttribute());"
+        currentText.contains("cat") || currentText.contains("purr") || currentText.contains("ENJOYMENT") -> "me.purr();"
+        currentText.contains("God") || currentText.contains("EXISTENCE") -> "me.setProof(you.toProof());"
+        currentText.contains("gender") || currentText.contains("F, to M") -> "me.toggleGender(); world.procreate(me, you);"
+        currentText.contains("A.M. to P.M.") -> "// diurnal_cycle_loop"
+        currentText.contains("role") || currentText.contains("S, to M") -> "me.toggleRoleBDSM();"
+        currentText.contains("trance") -> "world.makeHigh(me); world.makeHigh(you);"
+        currentText.contains("VIBRATIONS") || currentText.contains("COMPLETION") -> "me.addFeeling(\"complete\");"
+        currentText.contains("left me in") || currentText.contains("ISOLATION") -> "world.removeThing(you); // not found"
+        currentText.contains("FRAGMENTS") || currentText.contains("DISHEARTENED") -> "if (me.getMemory().isErasable()) me.removeFeeling(\"disheartened\");"
+        currentText.contains("ILLEGAL ARGUMENTS") -> "throw new IllegalArgumentException(\"God is always true\");"
+        currentText.contains("Ein") || currentText.contains("Trois") || currentText.contains("Fem") -> "world.announce(\"countdown\");"
+        currentText.contains("EXECUTION") -> "world.runExecution();"
+        currentText.contains("LO-O-OVE") || currentText.contains("algebraic") -> "(x^2 + y^2 - 1)^3 - x^2 * y^3 = 0;"
+        currentText.contains("execute(me)") -> "world.execute(me); // exit 0"
+        else -> ""
     }
 }
 
