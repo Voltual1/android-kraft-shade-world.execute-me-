@@ -7,7 +7,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -33,6 +32,7 @@ import world.eyes.witness.director.SceneType
 import world.eyes.witness.timeline.LrcLine
 import world.eyes.witness.timeline.LrcParser
 import world.eyes.witness.timeline.TimelineSnapshot
+import world.eyes.witness.ui.components.TouchTrailCanvas
 import world.eyes.witness.ui.stage.AlgebraicLoveStage
 import world.eyes.witness.ui.stage.ArgumentStackStage
 import world.eyes.witness.ui.stage.BiologyExistenceStage
@@ -128,17 +128,8 @@ fun WorldExecuteMeStage(audioPlayer: MvAudioPlayer) {
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .clickable {
-                if (isPlaying) {
-                    audioPlayer.pause()
-                } else {
-                    audioPlayer.play()
-                }
-            }
-    ) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        // 底层各分镜内容与 Shader 渲染
         when (sceneState.scene) {
             SceneType.BOOT_SEQUENCE -> {
                 BootSequenceStage(
@@ -233,6 +224,26 @@ fun WorldExecuteMeStage(audioPlayer: MvAudioPlayer) {
             }
         }
 
+        // 最顶层：触控轨迹跟随 Canvas（划动留光，短触切换播放/暂停）
+        TouchTrailCanvas(
+            onTap = {
+                if (isPlaying) {
+                    audioPlayer.pause()
+                } else {
+                    audioPlayer.play()
+                }
+            },
+            trailColor = when (sceneState.scene) {
+                SceneType.ALGEBRAIC_LOVE -> Color(0xFFFF4081)
+                SceneType.RAPID_EXECUTION_STORM,
+                SceneType.SIMULATION_EXECUTION -> Color(0xFFFF1744)
+                SceneType.CURRENT_CONVERSION -> Color(0xFFFFD600)
+                else -> Color(0xFF00E5FF)
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // 未播放时的交互提示
         if (!isPlaying) {
             Text(
                 text = "TAP SCREEN TO EXECUTE",
