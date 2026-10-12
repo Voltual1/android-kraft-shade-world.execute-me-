@@ -39,6 +39,13 @@ float drawLine(float d, float thickness) {
     return smoothstep(thickness, 0.0, abs(d));
 }
 
+// 兼容 GLES 2.0 的双曲正切函数实现
+float fastTanh(float x) {
+    float clampedX = clamp(x, -8.0, 8.0);
+    float e2x = exp(2.0 * clampedX);
+    return (e2x - 1.0) / (e2x + 1.0);
+}
+
 void main() {
     // 居中归一化坐标 (-1.0 ~ 1.0)
     vec2 uv = (textureCoordinate * 2.0 - 1.0);
@@ -121,8 +128,8 @@ void main() {
         float boxD = max(abs(uv.x), abs(uv.y)) - bound;
         float limitBox = drawLine(boxD, 0.006);
 
-        // 无穷逼近脉冲曲线
-        float limitCurve = drawLine(uv.y - 0.45 * tanh(uv.x * (3.0 + uTime * 1.5)), 0.008);
+        // 使用自定义 fastTanh 实现无穷逼近脉冲曲线
+        float limitCurve = drawLine(uv.y - 0.45 * fastTanh(uv.x * (3.0 + uTime * 1.5)), 0.008);
 
         color += vec3(1.0, 0.4, 0.2) * limitBox * (1.0 + uBeatPulse * 0.8);
         color += vec3(0.4, 0.8, 1.0) * limitCurve;
@@ -131,7 +138,7 @@ void main() {
     // 经典暗角
     vec2 tc = textureCoordinate;
     float vig = tc.x * tc.y * (1.0 - tc.x) * (1.0 - tc.y);
-    vig = clamp(pow(16.0 * vig, 0.3), 0.0, 1.0);
+    vig = clamp(pow(16.0 * max(vig, 0.0), 0.3), 0.0, 1.0);
     color *= vig;
 
     gl_FragColor = vec4(color, 1.0);
