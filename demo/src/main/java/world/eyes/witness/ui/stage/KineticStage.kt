@@ -27,6 +27,7 @@ import world.eyes.witness.director.SceneState
 import world.eyes.witness.director.SceneType
 import world.eyes.witness.timeline.TimelineSnapshot
 import world.eyes.witness.ui.theme.MvFonts
+import world.eyes.witness.data.GodDrinksJavaSource
 
 @Composable
 fun KineticStageOverlay(
@@ -73,21 +74,37 @@ fun KineticStageOverlay(
         }
     }
 
-    // 根据歌词行号与场景，自适应动态位置锚点（随节拍跳跃位置）
+    // 根据歌词行号与场景，自适应动态位置锚点（避免死焊在中央遮挡核心Shader内容）
     val alignment = when {
         isImpactWord -> Alignment.Center
+        sceneState.scene == SceneType.GEOMETRY_MATH -> Alignment.CenterStart
+        sceneState.scene == SceneType.ALGEBRAIC_LOVE -> Alignment.BottomCenter
         snapshot.currentLineIndex % 3 == 0 -> Alignment.CenterStart
         snapshot.currentLineIndex % 3 == 1 -> Alignment.CenterEnd
         else -> Alignment.Center
     }
 
     Box(modifier = modifier.fillMaxSize()) {
+        // 背景代码流 (低透明度信息密度填充)
+        val scrollY = -(sceneState.globalTimeSeconds * 40f % 2000f).dp
+        Text(
+            text = GodDrinksJavaSource.FULL_CODE + "\n\n" + GodDrinksJavaSource.FULL_CODE,
+            color = Color.White.copy(alpha = 0.08f),
+            fontFamily = MvFonts.CodeRegular,
+            fontSize = 11.sp,
+            lineHeight = 14.sp,
+            modifier = Modifier
+                .fillMaxSize()
+                .offset(y = scrollY)
+                .padding(horizontal = 24.dp)
+        )
+
         // 核心动力学单元：歌词与对应的 Java 运行代码紧紧相随
         if (currentText.isNotEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = if (isImpactWord) 20.dp else 40.dp, vertical = 32.dp),
+                    .padding(horizontal = if (isImpactWord) 20.dp else 40.dp, vertical = 48.dp),
                 contentAlignment = alignment
             ) {
                 Column(
@@ -166,7 +183,7 @@ fun KineticStageOverlay(
                     if (nextText.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            text = ">> $nextText",
+                            text = > $nextText",
                             color = Color.White.copy(alpha = 0.3f),
                             fontFamily = MvFonts.Terminal,
                             fontSize = 14.sp,

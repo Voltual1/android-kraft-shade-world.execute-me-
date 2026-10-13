@@ -9,6 +9,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,6 +49,8 @@ import world.eyes.witness.ui.stage.SimulationExecutionStage
 import world.eyes.witness.ui.stage.WorldBootStage
 import world.eyes.witness.ui.theme.KraftShadeTheme
 import world.eyes.witness.ui.theme.MvFonts
+import kotlin.math.cos
+import kotlin.math.sin
 
 class MainActivity : ComponentActivity() {
     private lateinit var audioPlayer: MvAudioPlayer
@@ -131,99 +134,124 @@ fun WorldExecuteMeStage(audioPlayer: MvAudioPlayer) {
         }
     }
 
+    // 重拍点引发屏幕镜头震颤
+    val isHeavyBeat = sceneState.beatPulse > 0.7f && (
+        sceneState.scene == SceneType.RAPID_EXECUTION_STORM ||
+        sceneState.scene == SceneType.SIMULATION_EXECUTION ||
+        sceneState.scene == SceneType.ISOLATION_AND_ERROR ||
+        sceneState.scene == SceneType.DESPERATE_EXECUTION
+    )
+    val shakeX = if (isHeavyBeat) (sin(sceneState.globalTimeSeconds * 100f) * 12f * sceneState.beatPulse).dp else 0.dp
+    val shakeY = if (isHeavyBeat) (cos(sceneState.globalTimeSeconds * 120f) * 12f * sceneState.beatPulse).dp else 0.dp
+
     Box(modifier = Modifier.fillMaxSize()) {
-        when (sceneState.scene) {
-            SceneType.BOOT_SEQUENCE -> {
-                BootSequenceStage(
-                    sceneState = sceneState,
-                    snapshot = snapshot,
-                    modifier = Modifier.fillMaxSize()
-                )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .offset(x = shakeX, y = shakeY) // 挂载镜头动力学
+        ) {
+            when (sceneState.scene) {
+                SceneType.BOOT_SEQUENCE -> {
+                    BootSequenceStage(
+                        sceneState = sceneState,
+                        snapshot = snapshot,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                SceneType.WORLD_BOOT_INSTRUMENTAL -> {
+                    WorldBootStage(
+                        sceneState = sceneState,
+                        snapshot = snapshot,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                SceneType.GEOMETRY_MATH -> {
+                    GeometryMathStage(
+                        sceneState = sceneState,
+                        snapshot = snapshot,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                SceneType.CURRENT_CONVERSION -> {
+                    CurrentConversionStage(
+                        sceneState = sceneState,
+                        snapshot = snapshot,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                SceneType.SIMULATION_EXECUTION -> {
+                    SimulationExecutionStage(
+                        sceneState = sceneState,
+                        snapshot = snapshot,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                SceneType.BIOLOGY_EXISTENCE -> {
+                    BiologyExistenceStage(
+                        sceneState = sceneState,
+                        snapshot = snapshot,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                SceneType.GENDER_AND_ROLES -> {
+                    GenderRolesStage(
+                        sceneState = sceneState,
+                        snapshot = snapshot,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                SceneType.ISOLATION_AND_ERROR -> {
+                    IsolationErrorStage(
+                        sceneState = sceneState,
+                        snapshot = snapshot,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                SceneType.ARGUMENT_STACK -> {
+                    ArgumentStackStage(
+                        sceneState = sceneState,
+                        snapshot = snapshot,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                SceneType.RAPID_EXECUTION_STORM -> {
+                    RapidExecutionStage(
+                        sceneState = sceneState,
+                        snapshot = snapshot,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                SceneType.DESPERATE_EXECUTION -> {
+                    DesperateExecutionStage(
+                        sceneState = sceneState,
+                        snapshot = snapshot,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                SceneType.ALGEBRAIC_LOVE -> {
+                    AlgebraicLoveStage(
+                        sceneState = sceneState,
+                        snapshot = snapshot,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                SceneType.OPEN_LOOP_SHUTDOWN -> {
+                    ShutdownStage(
+                        sceneState = sceneState,
+                        snapshot = snapshot,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
-            SceneType.WORLD_BOOT_INSTRUMENTAL -> {
-                WorldBootStage(
-                    sceneState = sceneState,
-                    snapshot = snapshot,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            SceneType.GEOMETRY_MATH -> {
-                GeometryMathStage(
-                    sceneState = sceneState,
-                    snapshot = snapshot,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            SceneType.CURRENT_CONVERSION -> {
-                CurrentConversionStage(
-                    sceneState = sceneState,
-                    snapshot = snapshot,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            SceneType.SIMULATION_EXECUTION -> {
-                SimulationExecutionStage(
-                    sceneState = sceneState,
-                    snapshot = snapshot,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            SceneType.BIOLOGY_EXISTENCE -> {
-                BiologyExistenceStage(
-                    sceneState = sceneState,
-                    snapshot = snapshot,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            SceneType.GENDER_AND_ROLES -> {
-                GenderRolesStage(
-                    sceneState = sceneState,
-                    snapshot = snapshot,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            SceneType.ISOLATION_AND_ERROR -> {
-                IsolationErrorStage(
-                    sceneState = sceneState,
-                    snapshot = snapshot,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            SceneType.ARGUMENT_STACK -> {
-                ArgumentStackStage(
-                    sceneState = sceneState,
-                    snapshot = snapshot,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            SceneType.RAPID_EXECUTION_STORM -> {
-                RapidExecutionStage(
-                    sceneState = sceneState,
-                    snapshot = snapshot,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            SceneType.DESPERATE_EXECUTION -> {
-                DesperateExecutionStage(
-                    sceneState = sceneState,
-                    snapshot = snapshot,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            SceneType.ALGEBRAIC_LOVE -> {
-                AlgebraicLoveStage(
-                    sceneState = sceneState,
-                    snapshot = snapshot,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            SceneType.OPEN_LOOP_SHUTDOWN -> {
-                ShutdownStage(
-                    sceneState = sceneState,
-                    snapshot = snapshot,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
+        }
+
+        // 强拍白闪覆盖层
+        if (sceneState.beatPulse > 0.85f && sceneState.scene == SceneType.RAPID_EXECUTION_STORM) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.White.copy(alpha = 0.8f * sceneState.beatPulse))
+            )
         }
 
         // 最顶层：触控轨迹跟随 Canvas

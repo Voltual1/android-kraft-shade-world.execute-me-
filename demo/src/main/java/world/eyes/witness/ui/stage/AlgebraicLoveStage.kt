@@ -12,6 +12,7 @@ import com.cardinalblue.kraftshade.compose.KraftShadeEffectView
 import com.cardinalblue.kraftshade.compose.rememberKraftShadeEffectState
 import world.eyes.witness.director.SceneState
 import world.eyes.witness.shader.AlgebraicLoveKraftShader
+import world.eyes.witness.shader.CrtTerminalKraftShader
 import world.eyes.witness.timeline.TimelineSnapshot
 
 @Composable
@@ -23,6 +24,7 @@ fun AlgebraicLoveStage(
     val localTime = sceneState.localTimeSeconds
     val effectState = rememberKraftShadeEffectState()
     val shader = remember { AlgebraicLoveKraftShader() }
+    val crtShader = remember { CrtTerminalKraftShader() }
 
     val subPhase = when {
         localTime < 3.611f -> 0
@@ -34,7 +36,12 @@ fun AlgebraicLoveStage(
     LaunchedEffect(Unit) {
         effectState.setEffect { targetBuffer ->
             pipeline(targetBuffer) {
-                step(shader, targetBuffer)
+                val (sceneRender) = createBufferReferences("sceneRender")
+                step(shader, sceneRender)
+                stepWithInputTexture(crtShader, sceneRender, targetBuffer) { s ->
+                    s.scanlineIntensity = 0.35f
+                    s.vignetteStrength = 0.45f
+                }
             }
         }
     }
@@ -43,6 +50,9 @@ fun AlgebraicLoveStage(
         shader.time = localTime
         shader.subPhase = subPhase
         shader.beatPulse = sceneState.beatPulse
+        
+        crtShader.time = localTime
+        crtShader.glitchIntensity = if (sceneState.isGlitchActive) 0.8f else sceneState.beatPulse * 0.15f
         effectState.requestRender()
     }
 
@@ -51,13 +61,11 @@ fun AlgebraicLoveStage(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // 底层：正确计算的正立代数心形方程 Shader
         KraftShadeEffectView(
             modifier = Modifier.fillMaxSize(),
             state = effectState
         )
 
-        // 顶层：沉浸式动力学文字排版与流动代码
         KineticStageOverlay(
             sceneState = sceneState,
             snapshot = snapshot,
