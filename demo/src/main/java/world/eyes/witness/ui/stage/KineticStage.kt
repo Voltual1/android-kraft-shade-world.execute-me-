@@ -183,7 +183,7 @@ fun KineticStageOverlay(
                     if (nextText.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            text = > $nextText",
+                            text = ">> $nextText",
                             color = Color.White.copy(alpha = 0.3f),
                             fontFamily = MvFonts.Terminal,
                             fontSize = 14.sp,
