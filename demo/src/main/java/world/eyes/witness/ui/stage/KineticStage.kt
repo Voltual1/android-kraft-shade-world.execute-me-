@@ -85,18 +85,33 @@ fun KineticStageOverlay(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
-        // 背景代码流 (低透明度信息密度填充)
-        val scrollY = -(sceneState.globalTimeSeconds * 40f % 2000f).dp
+        // 背景完整 19 个 Java 源码全量瀑布流 (低透明度信息密度填充)
+        val scrollY = -(sceneState.globalTimeSeconds * 50f % 4000f).dp
         Text(
-            text = GodDrinksJavaSource.FULL_CODE + "\n\n" + GodDrinksJavaSource.FULL_CODE,
+            text = GodDrinksJavaSource.FULL_CODE,
             color = Color.White.copy(alpha = 0.08f),
             fontFamily = MvFonts.CodeRegular,
-            fontSize = 11.sp,
-            lineHeight = 14.sp,
+            fontSize = 10.sp,
+            lineHeight = 13.sp,
             modifier = Modifier
                 .fillMaxSize()
                 .offset(y = scrollY)
-                .padding(horizontal = 24.dp)
+                .padding(horizontal = 20.dp)
+        )
+
+        // 右上角浮现当前场景对应的 Java 类定义片段
+        val sceneClassSnippet = remember(sceneState.scene) {
+            GodDrinksJavaSource.getCodeForScene(sceneState.scene)
+        }
+        Text(
+            text = sceneClassSnippet.take(450),
+            color = Color.Cyan.copy(alpha = 0.12f),
+            fontFamily = MvFonts.CodeRegular,
+            fontSize = 9.sp,
+            lineHeight = 12.sp,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 40.dp, end = 16.dp)
         )
 
         // 核心动力学单元：歌词与对应的 Java 运行代码紧紧相随
