@@ -21,6 +21,7 @@ class StoryRuntime(
     private var typingJob: Job? = null
     private var shakeJob: Job? = null
     private var cameraEffectJob: Job? = null
+    private var animTextJob: Job? = null
     private var selectedPredicateValue: String? = null
 
     var onPlayMusicListener: ((key: String, volume: Float) -> Unit)? = null
@@ -265,6 +266,105 @@ class StoryRuntime(
                 delay(16)
             }
             _state.update { it.copy(cameraEffect = it.cameraEffect.copy(shakeOffsetX = 0f, shakeOffsetY = 0f)) }
+        }
+    }
+
+    internal suspend fun showAnimText(
+        templateName: String,
+        content: String,
+        posX: Float,
+        posY: Float,
+        isBlocking: Boolean
+    ) {
+        animTextJob?.cancel()
+        val (main, sub) = StorySplitContent.parse(content)
+        val animDuration = 5000L
+
+        _state.update {
+            it.copy(
+                animText = AnimTextState(
+                    isVisible = true,
+                    mainText = main,
+                    subText = sub,
+                    positionX = posX,
+                    positionY = posY,
+                    durationMs = animDuration
+                )
+            )
+        }
+
+        val job = scope.launch {
+            delay(animDuration)
+            _state.update { it.copy(animText = it.animText.copy(isVisible = false)) }
+        }
+        animTextJob = job
+
+        if (isBlocking && _state.value.playbackMode != PlaybackMode.SKIP) {
+            job.join()
+        }
+    }
+
+    internal suspend fun setSpellSticker(
+        id: String,
+        action: String,
+        style: String,
+        content: String,
+        x: Float,
+        y: Float,
+        scaleX: Float,
+        scaleY: Float,
+        angle: Float,
+        alpha: Float,
+        isBlocking: Boolean
+    ) {
+        if (action.equals("hide", ignoreCase = true)) {
+            _state.update {
+                val stickers = it.spellStickers.toMutableMap()
+                stickers.remove(id)
+                it.copy(spellStickers = stickers)
+            }
+            return
+        }
+
+        val defaultTexts = if (style.equals("fire", ignoreCase = true)) {
+            Pair("夜雪无痕，噤声。", "Ночной снег без следа, молчи.")
+        } else {
+            Pair("不是灾异，而是目光。", "er eigi ógæfa, heldr augna máttur.")
+        }
+
+        val parsed = StorySplitContent.parse(content)
+        val main = parsed.first.ifEmpty { defaultTexts.first }
+        val sub = parsed.second.ifEmpty { defaultTexts.second }
+
+        val item = SpellStickerItem(
+            id = id,
+            style = style,
+            mainText = main,
+            subText = sub,
+            x = x,
+            y = y,
+            scaleX = scaleX,
+            scaleY = scaleY,
+            angle = angle,
+            alpha = alpha,
+            isVisible = true
+        )
+
+        _state.update {
+            val stickers = it.spellStickers.toMutableMap()
+            stickers[id] = item
+            it.copy(spellStickers = stickers)
+        }
+
+        if (isBlocking) {
+            waitForClick()
+        }
+    }
+
+    internal fun clearSpellStickers(isBlocking: Boolean) {
+        _state.update { it.copy(spellStickers = emptyMap()) }
+        if (isBlocking) {
+            waitForClick()
         }
     }
 

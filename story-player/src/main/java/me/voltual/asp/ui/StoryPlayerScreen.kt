@@ -97,7 +97,13 @@ fun StoryPlayerScreen(
             }
         }
 
-        // 3. 遮罩层 (Blocker / SlideMask using KraftShade)
+        // 3. 符文印章层 (SpellSticker)
+        StorySpellStickerView(stickers = state.spellStickers)
+
+        // 4. 地区开场印章动效层 (Location Stamp / AnimText)
+        StoryLocationStamp(animTextState = state.animText)
+
+        // 5. 遮罩层 (Blocker / SlideMask using KraftShade)
         val blocker = state.blocker
         if (blocker.alpha > 0f) {
             if (blocker.style == "slider" || blocker.style == "verticalslider") {
@@ -143,7 +149,7 @@ fun StoryPlayerScreen(
             }
         }
 
-        // 4. 对话框层
+        // 6. 对话框层
         StoryDialogueBox(
             dialogue = state.dialogue,
             playbackMode = state.playbackMode,
@@ -151,7 +157,7 @@ fun StoryPlayerScreen(
             modifier = Modifier.align(Alignment.BottomCenter)
         )
 
-        // 5. 分支选项浮层
+        // 7. 分支选项浮层
         StoryDecisionOverlay(
             decisionState = state.decision,
             onSelectOption = { runtime.selectDecision(it) }

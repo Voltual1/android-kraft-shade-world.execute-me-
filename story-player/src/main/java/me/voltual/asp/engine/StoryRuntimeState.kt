@@ -30,6 +30,29 @@ data class CameraEffectState(
     val shakeOffsetY: Float = 0f
 )
 
+data class AnimTextState(
+    val isVisible: Boolean = false,
+    val mainText: String = "",
+    val subText: String = "",
+    val positionX: Float = 0f,
+    val positionY: Float = 0f,
+    val durationMs: Long = 5000L
+)
+
+data class SpellStickerItem(
+    val id: String,
+    val style: String = "sami",
+    val mainText: String = "",
+    val subText: String = "",
+    val x: Float = 0f,
+    val y: Float = 0f,
+    val scaleX: Float = 1f,
+    val scaleY: Float = 1f,
+    val angle: Float = 0f,
+    val alpha: Float = 1f,
+    val isVisible: Boolean = true
+)
+
 data class DecisionOption(
     val text: String,
     val value: String?
@@ -61,6 +84,8 @@ data class StoryDisplayState(
     val characterSlot2: CharacterSlotState = CharacterSlotState(),
     val blocker: BlockerState = BlockerState(),
     val cameraEffect: CameraEffectState = CameraEffectState(),
+    val animText: AnimTextState = AnimTextState(),
+    val spellStickers: Map<String, SpellStickerItem> = emptyMap(),
     val dialogue: DialogueState = DialogueState(),
     val decision: DecisionState = DecisionState(),
     val playbackMode: PlaybackMode = PlaybackMode.MANUAL,

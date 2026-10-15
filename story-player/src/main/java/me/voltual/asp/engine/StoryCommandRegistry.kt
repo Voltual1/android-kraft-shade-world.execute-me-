@@ -124,6 +124,61 @@ object StoryCommandRegistry {
             )
         }
 
+        // [animtext] 地区印章指令
+        register("animtext") { ctx ->
+            val name = ctx.line.args["name"]?.toString() ?: ""
+            val block = ctx.line.args["block"] == true
+            val posStr = ctx.line.args["pos"]?.toString()
+            var posX = 0f
+            var posY = 0f
+            if (posStr != null && posStr.contains(",")) {
+                val parts = posStr.split(",")
+                posX = parts.getOrNull(0)?.trim()?.toFloatOrNull() ?: 0f
+                posY = parts.getOrNull(1)?.trim()?.toFloatOrNull() ?: 0f
+            }
+
+            ctx.runtime.showAnimText(
+                templateName = name,
+                content = ctx.line.trailingText.ifEmpty { ctx.line.content },
+                posX = posX,
+                posY = posY,
+                isBlocking = block
+            )
+        }
+
+        // [spellsticker] 符文印章指令
+        register("spellsticker") { ctx ->
+            val id = ctx.line.args["id"]?.toString() ?: return@register
+            val action = ctx.line.args["action"]?.toString() ?: "show"
+            val style = ctx.line.args["style"]?.toString() ?: "sami"
+            val block = ctx.line.args["block"] == true
+            val alpha = (ctx.line.args["alpha"] as? Number)?.toFloat() ?: 1f
+            val angle = (ctx.line.args["angle"] as? Number)?.toFloat() ?: 0f
+            val x = (ctx.line.args["x"] as? Number)?.toFloat() ?: 0f
+            val y = (ctx.line.args["y"] as? Number)?.toFloat() ?: 0f
+            val scaleX = (ctx.line.args["xScale"] as? Number)?.toFloat() ?: 1f
+            val scaleY = (ctx.line.args["yScale"] as? Number)?.toFloat() ?: 1f
+
+            ctx.runtime.setSpellSticker(
+                id = id,
+                action = action,
+                style = style,
+                content = ctx.line.content,
+                x = x,
+                y = y,
+                scaleX = scaleX,
+                scaleY = scaleY,
+                angle = angle,
+                alpha = alpha,
+                isBlocking = block
+            )
+        }
+
+        register("spellstickerclear") { ctx ->
+            val block = ctx.line.args["block"] == true
+            ctx.runtime.clearSpellStickers(isBlocking = block)
+        }
+
         register("decision") { ctx ->
             val options = ctx.line.args["options"]?.toString()?.split(";") ?: emptyList()
             val values = ctx.line.args["values"]?.toString()?.split(";") ?: emptyList()
