@@ -11,6 +11,7 @@ navigationCompose = "2.9.2"
 composeBom = "2025.07.00"
 appcompat = "1.7.1"
 material = "1.12.0"
+kotlinx-serialization="1.9.0"" 
 media3 = "1.8.0"
 kotlinxCoroutinesAndroid = "1.10.2"
 
@@ -21,6 +22,8 @@ jetBrains-immutableCollections = { group = "org.jetbrains.kotlinx", name = "kotl
 kraftshade = { group = "com.cardinalblue", name = "kraftshade", version = "1.0.40" }
 kraftshade-compose = { group = "com.cardinalblue", name = "kraftshade-compose", version = "1.0.40" }
 kraftshade-media3 = { group = "com.cardinalblue", name = "kraftshade-media3", version = "1.0.40" }
+
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -55,3 +58,4 @@ jetbrains-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = 
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 android-library = { id = "com.android.library", version.ref = "agp" }
 mavenPublish = { id = "com.vanniktech.maven.publish", version = "0.34.0" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
