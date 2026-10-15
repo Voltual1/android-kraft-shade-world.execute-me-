@@ -1,11 +1,11 @@
 package me.voltual.asp.engine
 
-import me.voltual.asp.engine.log.RuntimeDecisionState
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import me.voltual.asp.Context
+import me.voltual.asp.engine.log.RuntimeDecisionState
 import me.voltual.asp.engine.log.parseDecision
 import me.voltual.asp.engine.log.parsePredicateReferences
 import me.voltual.asp.engine.log.passesGate
@@ -225,9 +225,9 @@ class StoryRuntime(
     val displayedLineEvents: SharedFlow<Int?> = _displayedLineEvents.asSharedFlow()
 
     private var displayedLineIndexValue: Int? = null
-    var displayedLineIndex: Int?
+    private var displayedLine: Int?
         get() = displayedLineIndexValue
-        private set(value) {
+        set(value) {
             if (displayedLineIndexValue == value) return
             displayedLineIndexValue = value
             _displayedLineEvents.tryEmit(value)
@@ -289,10 +289,10 @@ class StoryRuntime(
     }
 
     fun getState(): PlayerState = state
-    fun getDisplayedLineIndex(): Int? = displayedLineIndex
+    fun getDisplayedLineIndex(): Int? = displayedLine
     fun getDecisionSelectValue(): Int = decisionSelectValue
     fun getLogPosition(): RuntimeLogPosition = RuntimeLogPosition(
-        lineIndex = displayedLineIndex,
+        lineIndex = displayedLine,
         selections = choiceHistory.toList()
     )
     fun getAutoPlayState(): AutoPlayState = AutoPlayState(
@@ -311,7 +311,7 @@ class StoryRuntime(
                 }
             }
         }
-        listener(displayedLineIndex)
+        listener(displayedLine)
         return { job.cancel() }
     }
 
@@ -621,7 +621,7 @@ class StoryRuntime(
                             continue
                         }
                         resetMultiline()
-                        displayedLineIndex = line.lineNumber
+                        displayedLine = line.lineNumber
                         waitForDialogueInput(line.speaker, line.text)
                         return
                     }
@@ -629,7 +629,7 @@ class StoryRuntime(
                     is ParsedLine.Narration -> {
                         if (line.text.isEmpty()) continue
                         resetMultiline()
-                        displayedLineIndex = line.lineNumber
+                        displayedLine = line.lineNumber
                         waitForDialogueInput("", line.text)
                         return
                     }
@@ -724,7 +724,7 @@ class StoryRuntime(
             "dialog" -> {
                 if (line.content.isNotEmpty()) {
                     resetMultiline()
-                    displayedLineIndex = line.lineNumber
+                    displayedLine = line.lineNumber
                     waitForDialogueInput(toStringParam(exactArg(args, "name")), line.content)
                     return CommandResult.WAIT_INPUT
                 }
@@ -736,7 +736,7 @@ class StoryRuntime(
             "aside" -> {
                 if (line.content.isNotEmpty()) {
                     resetMultiline()
-                    displayedLineIndex = line.lineNumber
+                    displayedLine = line.lineNumber
                     startTypingDialogue("", line.content, executor = "aside")
                     return CommandResult.WAIT_INPUT
                 }
@@ -1796,7 +1796,7 @@ class StoryRuntime(
                 val shownChars = multilineShownChars
                 multilineText += text
                 multilineEnd = toBoolean(exactArg(args, "end"), false)
-                displayedLineIndex = line.lineNumber
+                displayedLine = line.lineNumber
                 startTypingDialogue(
                     speaker = toStringParam(exactArg(args, "name")),
                     text = multilineText,
@@ -1819,7 +1819,7 @@ class StoryRuntime(
                 val y = toNumber(exactArg(args, "y"), 0f)
                 if (x < 0 || x > 1280 || y < 0 || y > 720) return CommandResult.CONTINUE
 
-                displayedLineIndex = line.lineNumber
+                displayedLine = line.lineNumber
                 cancelTyping()
                 currentMessageLength = parseRichChars(text).size
                 currentRawMessageLength = text.length
