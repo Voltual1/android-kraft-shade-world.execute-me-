@@ -79,4 +79,5 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.kotlinx.io)
 }
