@@ -21,7 +21,6 @@ class StoryRuntime(
     private var typingJob: Job? = null
     private var selectedPredicateValue: String? = null
 
-    // 交互监听回调（宿主音效播放器/网络层使用）
     var onPlayMusicListener: ((key: String, volume: Float) -> Unit)? = null
     var onStopMusicListener: ((fadeTime: Float) -> Unit)? = null
     var onPlaySoundListener: ((key: String) -> Unit)? = null
@@ -35,16 +34,14 @@ class StoryRuntime(
     }
 
     private suspend fun runLoop() {
-        while (currentIndex < parsedLines.size && isActive) {
+        while (currentIndex < parsedLines.size && scope.isActive) {
             val line = parsedLines[currentIndex]
             _state.update { it.copy(currentLineIndex = currentIndex) }
 
             executeLine(line)
 
-            // 如果当前处于等待用户点击状态且模式为非自动，挂起挂钩
             if (isWaitingForUserClick) {
                 if (_state.value.playbackMode == PlaybackMode.SKIP) {
-                    // 跳过模式：忽略挂起直接继续
                     isWaitingForUserClick = false
                     delay(50)
                 } else if (_state.value.playbackMode == PlaybackMode.AUTO) {
@@ -52,8 +49,7 @@ class StoryRuntime(
                     delay(autoDelay)
                     isWaitingForUserClick = false
                 } else {
-                    // MANUAL 模式下在此挂起直到 advance() 调用
-                    while (isWaitingForUserClick && _state.value.playbackMode == PlaybackMode.MANUAL && isActive) {
+                    while (isWaitingForUserClick && _state.value.playbackMode == PlaybackMode.MANUAL && scope.isActive) {
                         delay(50)
                     }
                 }
@@ -81,7 +77,6 @@ class StoryRuntime(
     }
 
     fun onUserClick() {
-        // 如果文本还在打印中，点击立刻显示全文
         if (_state.value.dialogue.isTyping) {
             typingJob?.cancel()
             _state.update {
@@ -95,7 +90,6 @@ class StoryRuntime(
             return
         }
 
-        // 如果在选择支界面，不允许通过普通点击推进
         if (_state.value.decision.isVisible) return
 
         if (isWaitingForUserClick) {
@@ -129,7 +123,6 @@ class StoryRuntime(
             )
         }
 
-        // 简易打字机协程模拟
         typingJob = scope.launch {
             if (_state.value.playbackMode == PlaybackMode.SKIP) {
                 _state.update { it.copy(dialogue = it.dialogue.copy(text = text, isTyping = false)) }
@@ -192,11 +185,10 @@ class StoryRuntime(
     }
 
     internal fun applyPredicate(references: List<String>) {
-        // 如果选择的值不匹配分支逻辑条件，可以跳过后续匹配代码段（简化的分支路由处理）
         if (selectedPredicateValue != null && references.isNotEmpty()) {
             val matched = references.contains(selectedPredicateValue)
             if (!matched) {
-                // 如果未匹配到选择的分支项，跳跃当前谓词逻辑块
+                // 跳转或跳过逻辑
             }
         }
     }
@@ -224,9 +216,7 @@ class StoryRuntime(
         onCameraShakeListener?.invoke(duration, x, y)
     }
 
-    internal fun onUnhandledCommand(line: ParsedCommandLine) {
-        // 未处理的命令行降级或打印日志
-    }
+    internal fun onUnhandledCommand(line: ParsedCommandLine) {}
 
     private fun waitForClick() {
         isWaitingForUserClick = true
