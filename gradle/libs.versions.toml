@@ -8,6 +8,7 @@ espressoCore = "3.6.1"
 lifecycleRuntimeKtx = "2.9.2"
 activityCompose = "1.10.1"
 navigationCompose = "2.9.2"
+coil = "3.4.0"
 composeBom = "2025.07.00"
 appcompat = "1.7.1"
 material = "1.12.0"
@@ -19,6 +20,8 @@ kotlinxCoroutinesAndroid = "1.10.2"
 [libraries]
 jetBrains-coroutinesAndroid = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinxCoroutinesAndroid" }
 jetBrains-immutableCollections = { group = "org.jetbrains.kotlinx", name = "kotlinx-collections-immutable", version = "0.4.0" }
+
+coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
 
 kotlinx-io = { module = "org.jetbrains.kotlinx:kotlinx-io-core", version.ref = "kotlinx-io" }
 
