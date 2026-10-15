@@ -1,0 +1,156 @@
+package me.voltual.asp.engine.rendering
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import me.voltual.asp.engine.ColorRgba
+import me.voltual.asp.engine.DialogueLayout
+import me.voltual.asp.engine.RichTagStyles
+import me.voltual.asp.engine.Vec2
+
+data class BackgroundVisualState(
+    val textureKey: String? = null,
+    val alpha: Float = 1f,
+    val scaleX: Float = 1f,
+    val scaleY: Float = 1f,
+    val x: Float = 0f,
+    val y: Float = 0f,
+    val tiled: Boolean = false,
+    val screenAdapt: String? = null
+)
+
+data class GridBackgroundVisualState(
+    val imageKeys: List<String> = emptyList(),
+    val assetKind: String = "background",
+    val layout: String = "large",
+    val alpha: Float = 1f,
+    val scaleX: Float = 1f,
+    val scaleY: Float = 1f,
+    val x: Float = 0f,
+    val y: Float = 0f,
+    val solidWidths: List<Float> = emptyList(),
+    val solidHeights: List<Float> = emptyList(),
+    val initPositionMode: String = "default"
+)
+
+data class CharacterVisualSlot(
+    val slot: String,
+    val characterKey: String? = null,
+    val expression: String? = null,
+    val alpha: Float = 1f,
+    val scaleX: Float = 1f,
+    val scaleY: Float = 1f,
+    val x: Float = 0f,
+    val y: Float = 0f,
+    val rotationDeg: Float = 0f,
+    val dimmed: Boolean = false,
+    val zIndex: Float = 0f
+)
+
+data class BlockerVisualState(
+    val visible: Boolean = false,
+    val color: ColorRgba = ColorRgba(0f, 0f, 0f, 0f),
+    val style: String = "default",
+    val image: String? = null,
+    val inverse: Boolean = false,
+    val alpha: Float = 0f,
+    val flipX: Boolean = false,
+    val flipY: Boolean = false
+)
+
+data class CurtainVisualState(
+    val direction: Int,
+    val fill: Float,
+    val alpha: Float,
+    val grad: Boolean
+)
+
+data class DialogueVisualState(
+    val visible: Boolean = false,
+    val speaker: String = "",
+    val text: String = "",
+    val tagStyles: RichTagStyles? = null,
+    val layout: DialogueLayout? = null,
+    val isExpanded: Boolean = false
+)
+
+data class SubtitleVisualState(
+    val visible: Boolean = false,
+    val text: String = "",
+    val x: Float = 0f,
+    val y: Float = 0f,
+    val sizePx: Float = 24f,
+    val widthPx: Float = 1280f,
+    val alignment: String = "left",
+    val alpha: Float = 1f
+)
+
+data class StickerVisualState(
+    val id: String,
+    val visible: Boolean = false,
+    val text: String = "",
+    val x: Float = 0f,
+    val y: Float = 0f,
+    val sizePx: Float = 24f,
+    val widthPx: Float = 1280f,
+    val alignment: String = "left",
+    val alpha: Float = 1f,
+    val rotationDeg: Float = 0f
+)
+
+data class DecisionVisualState(
+    val visible: Boolean = false,
+    val options: List<String> = emptyList(),
+    val values: List<Int> = emptyList(),
+    val onSelect: (Int) -> Unit = {}
+)
+
+data class VideoVisualState(
+    val visible: Boolean = false,
+    val url: String = ""
+)
+
+data class CameraVisualState(
+    val shakeX: Float = 0f,
+    val shakeY: Float = 0f,
+    val grayscale: Float = 0f,
+    val colorInverse: Float = 0f
+)
+
+data class ShowItemVisualState(
+    val visible: Boolean = false,
+    val key: String = "",
+    val blackAlpha: Float = 0.4f,
+    val alpha: Float = 1f,
+    val offsetX: Float = 0f,
+    val offsetY: Float = 0f
+)
+
+data class TimerVisualState(
+    val visible: Boolean = false,
+    val timeFormatted: String = "",
+    val alpha: Float = 1f,
+    val x: Float = 0f,
+    val y: Float = 0f,
+    val sizePx: Float = 24f,
+    val widthPx: Float = 1280f
+)
+
+class StoryRendererState {
+    var background by mutableStateOf<BackgroundVisualState?>(null)
+    var foregroundImage by mutableStateOf<BackgroundVisualState?>(null)
+    var imageRotationDeg by mutableStateOf(0f)
+    var gridBackground by mutableStateOf<GridBackgroundVisualState?>(null)
+    val characters = mutableStateMapOf<String, CharacterVisualSlot>()
+    var blocker by mutableStateOf(BlockerVisualState())
+    val curtains = mutableStateMapOf<Int, CurtainVisualState>()
+    var dialogue by mutableStateOf(DialogueVisualState())
+    var subtitle by mutableStateOf(SubtitleVisualState())
+    val stickers = mutableStateMapOf<String, StickerVisualState>()
+    var decision by mutableStateOf(DecisionVisualState())
+    var video by mutableStateOf(VideoVisualState())
+    var camera by mutableStateOf(CameraVisualState())
+    var showItem by mutableStateOf<ShowItemVisualState?>(null)
+    var timerSticker by mutableStateOf(TimerVisualState())
+}
