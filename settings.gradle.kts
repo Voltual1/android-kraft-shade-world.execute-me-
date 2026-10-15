@@ -30,5 +30,6 @@ dependencyResolutionManagement {
 rootProject.name = "KraftShade"
 include(":demo")
 include(":kraft-shade")
+include(":story-player")
 include(":kraft-shade-compose")
 include(":kraft-shade-media3")
