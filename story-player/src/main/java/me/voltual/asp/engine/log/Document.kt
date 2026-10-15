@@ -1,5 +1,10 @@
 package me.voltual.asp.engine.log
 
+private sealed interface OrderedItem {
+    data class ChoiceItem(val emission: LogEmission.Choice) : OrderedItem
+    data class TextItem(val key: String) : OrderedItem
+}
+
 fun buildLogDocument(flow: StoryFlowResult): LogDocument {
     val conditions = flow.conditions
     val decisions = flow.decisions
@@ -20,11 +25,6 @@ fun buildLogDocument(flow: StoryFlowResult): LogDocument {
     }
 
     val sorted = emissions.sortedBy { it.lineIndex }
-
-    sealed class OrderedItem {
-        data class ChoiceItem(val emission: LogEmission.Choice) : OrderedItem()
-        data class TextItem(val key: String) : OrderedItem()
-    }
 
     val textItems = mutableMapOf<String, Pair<MutableList<Int>, LogLineEntry>>()
     val ordered = mutableListOf<OrderedItem>()
