@@ -4,12 +4,12 @@ import android.content.Context
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
-import me.voltual.asp.engine.StoryAsset
-import me.voltual.asp.engine.StoryContext
-import me.voltual.asp.engine.StoryAudio
+import kotlinx.coroutines.*
 import me.voltual.asp.engine.PlayMusicInput
 import me.voltual.asp.engine.PlaySoundInput
-import kotlinx.coroutines.*
+import me.voltual.asp.engine.StoryAsset
+import me.voltual.asp.engine.StoryAudio
+import me.voltual.asp.engine.StoryContext
 import java.util.concurrent.ConcurrentHashMap
 
 class StoryAudioPlayer(
@@ -38,7 +38,7 @@ class StoryAudioPlayer(
     override suspend fun playMusic(input: PlayMusicInput) {
         val url = resolveAudioUrl(input.key) ?: return
         musicBaseVolume = input.volume
-        
+
         withContext(Dispatchers.Main) {
             val player = musicPlayer ?: return@withContext
             player.stop()
@@ -54,7 +54,6 @@ class StoryAudioPlayer(
         withContext(Dispatchers.Main) {
             val player = musicPlayer ?: return@withContext
             if (fadeMs > 0) {
-                // 简易淡出处理
                 val steps = 10
                 val interval = fadeMs / steps
                 val stepVolume = player.volume / steps
@@ -77,8 +76,7 @@ class StoryAudioPlayer(
     override suspend fun playSound(input: PlaySoundInput) {
         val url = resolveAudioUrl(input.key) ?: return
         withContext(Dispatchers.Main) {
-            val channelKey = input.channel.ifEmpty { input.key }
-            // 释放旧的同通道音效播放器
+            val channelKey = if (input.channel.isNotEmpty()) input.channel else input.key
             soundPlayers[channelKey]?.release()
 
             val soundPlayer = ExoPlayer.Builder(context).build().apply {

@@ -122,3 +122,29 @@ data class RuntimeWarning(
         UNKNOWN_COMMAND
     }
 }
+
+data class PlayMusicInput(
+    val key: String,
+    val volume: Float = 1f,
+    val crossfadeMs: Long = 0L,
+    val delayMs: Long = 0L,
+    val intro: String? = null
+)
+
+data class PlaySoundInput(
+    val key: String,
+    val volume: Float = 1f,
+    val channel: String = "",
+    val loop: Boolean = false,
+    val delayMs: Long = 0L
+)
+
+interface StoryAudio {
+    fun destroy()
+    suspend fun playMusic(input: PlayMusicInput)
+    suspend fun playSound(input: PlaySoundInput)
+    suspend fun setMusicVolume(volume: Float, fadeMs: Long)
+    suspend fun setSoundVolume(channel: String, volume: Float, fadeMs: Long)
+    suspend fun stopMusic(fadeMs: Long)
+    suspend fun stopSound(channel: String, fadeMs: Long)
+}
