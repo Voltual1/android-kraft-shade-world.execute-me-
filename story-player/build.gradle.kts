@@ -7,7 +7,7 @@ plugins {
 android {
     namespace = "me.voltual.asp"
     
-    compileSdk = 33
+    compileSdk = 35
 
     defaultConfig {
         minSdk = 21
