@@ -19,12 +19,13 @@ class StoryRuntime(
     private var isWaitingForUserClick = false
     private var delayJob: Job? = null
     private var typingJob: Job? = null
+    private var shakeJob: Job? = null
+    private var cameraEffectJob: Job? = null
     private var selectedPredicateValue: String? = null
 
     var onPlayMusicListener: ((key: String, volume: Float) -> Unit)? = null
     var onStopMusicListener: ((fadeTime: Float) -> Unit)? = null
     var onPlaySoundListener: ((key: String) -> Unit)? = null
-    var onCameraShakeListener: ((duration: Float, x: Float, y: Float) -> Unit)? = null
 
     fun start() {
         currentIndex = 0
@@ -161,16 +162,109 @@ class StoryRuntime(
         }
     }
 
-    internal fun setBlocker(r: Float, g: Float, b: Float, a: Float, duration: Float, isBlocking: Boolean) {
+    internal fun setBlocker(
+        r: Float, g: Float, b: Float, a: Float,
+        duration: Float, isBlocking: Boolean,
+        style: String = "default",
+        inverse: Boolean = false
+    ) {
         _state.update {
             it.copy(
-                blocker = BlockerState(r = r, g = g, b = b, alpha = a, duration = duration)
+                blocker = BlockerState(
+                    r = r, g = g, b = b, alpha = a,
+                    duration = duration, style = style, inverse = inverse
+                )
             )
         }
         if (isBlocking && duration > 0f && _state.value.playbackMode != PlaybackMode.SKIP) {
             scope.launch {
                 delay((duration * 1000).toLong())
             }
+        }
+    }
+
+    internal suspend fun setCameraEffect(
+        effect: String,
+        amount: Float,
+        duration: Float,
+        isBlocking: Boolean,
+        keep: Boolean,
+        initAmount: Float?
+    ) {
+        cameraEffectJob?.cancel()
+        val durationMs = (duration * 1000).toLong()
+
+        if (effect.equals("Colorinverse", ignoreCase = true)) {
+            _state.update { it.copy(cameraEffect = it.cameraEffect.copy(inverseAmount = amount)) }
+            return
+        }
+
+        if (effect.equals("Grayscale", ignoreCase = true)) {
+            val fromAmount = initAmount ?: _state.value.cameraEffect.grayAmount
+            if (durationMs <= 0) {
+                _state.update { it.copy(cameraEffect = it.cameraEffect.copy(grayAmount = if (keep) amount else 0f)) }
+                return
+            }
+
+            val job = scope.launch {
+                val startTime = System.currentTimeMillis()
+                while (isActive) {
+                    val elapsed = System.currentTimeMillis() - startTime
+                    val progress = (elapsed.toFloat() / durationMs).coerceIn(0f, 1f)
+                    val current = fromAmount + (amount - fromAmount) * progress
+                    _state.update { it.copy(cameraEffect = it.cameraEffect.copy(grayAmount = current)) }
+                    if (progress >= 1f) break
+                    delay(16)
+                }
+                _state.update { it.copy(cameraEffect = it.cameraEffect.copy(grayAmount = if (keep) amount else 0f)) }
+            }
+            cameraEffectJob = job
+            if (isBlocking && _state.value.playbackMode != PlaybackMode.SKIP) {
+                job.join()
+            }
+        }
+    }
+
+    internal fun triggerCameraShake(
+        duration: Float,
+        xStrength: Float,
+        yStrength: Float,
+        vibrato: Int = 10,
+        randomness: Float = 90f,
+        fadeOut: Boolean = true,
+        stop: Boolean = false
+    ) {
+        shakeJob?.cancel()
+        if (stop || duration <= 0f) {
+            _state.update { it.copy(cameraEffect = it.cameraEffect.copy(shakeOffsetX = 0f, shakeOffsetY = 0f)) }
+            return
+        }
+
+        val durationMs = (duration * 1000).toLong()
+        val path = StoryShakePath.buildShakePath(
+            durationMs = durationMs,
+            input = ShakePathInput(
+                fadeOut = fadeOut,
+                randomness = randomness,
+                vibrato = vibrato,
+                xStrength = xStrength,
+                yStrength = yStrength
+            )
+        )
+
+        shakeJob = scope.launch {
+            val startTime = System.currentTimeMillis()
+            while (isActive) {
+                val elapsed = System.currentTimeMillis() - startTime
+                val progress = (elapsed.toFloat() / durationMs).coerceIn(0f, 1f)
+                val (offsetX, offsetY) = StoryShakePath.sampleShakePath(path, progress)
+                _state.update {
+                    it.copy(cameraEffect = it.cameraEffect.copy(shakeOffsetX = offsetX, shakeOffsetY = offsetY))
+                }
+                if (progress >= 1f) break
+                delay(16)
+            }
+            _state.update { it.copy(cameraEffect = it.cameraEffect.copy(shakeOffsetX = 0f, shakeOffsetY = 0f)) }
         }
     }
 
@@ -188,7 +282,7 @@ class StoryRuntime(
         if (selectedPredicateValue != null && references.isNotEmpty()) {
             val matched = references.contains(selectedPredicateValue)
             if (!matched) {
-                // 跳转或跳过逻辑
+                // 跳过分支代码段处理
             }
         }
     }
@@ -210,10 +304,6 @@ class StoryRuntime(
 
     internal fun playSound(key: String) {
         onPlaySoundListener?.invoke(key)
-    }
-
-    internal fun triggerCameraShake(duration: Float, x: Float, y: Float) {
-        onCameraShakeListener?.invoke(duration, x, y)
     }
 
     internal fun onUnhandledCommand(line: ParsedCommandLine) {}

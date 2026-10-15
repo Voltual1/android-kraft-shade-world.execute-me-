@@ -24,45 +24,42 @@ object StoryCommandRegistry {
         if (handler != null) {
             handler(CommandContext(line, runtime))
         } else {
-            // 未知的指令类型作为默认文本或空指令处理
             runtime.onUnhandledCommand(line)
         }
     }
 
     private fun registerDefaultCommands() {
-        // [Dialog] 指令或对话设置
         register("dialog") { ctx ->
-            val speaker = ctx.line.args["speaker"]?.toString()
+            val speaker = ctx.line.args["name"]?.toString() ?: ctx.line.args["speaker"]?.toString()
             val text = ctx.line.content
             ctx.runtime.showDialogue(speaker = speaker, text = text)
         }
 
-        // [Image] 或 [Background] 改变背景/全屏CG
         register("image") { ctx ->
             val imageKey = ctx.line.args["image"]?.toString() ?: ctx.line.args["file"]?.toString()
-            val duration = (ctx.line.args["time"] as? Number)?.toFloat() ?: 0f
+            val duration = (ctx.line.args["fadetime"] as? Number)?.toFloat() ?: (ctx.line.args["time"] as? Number)?.toFloat() ?: 0f
             val x = (ctx.line.args["x"] as? Number)?.toFloat() ?: 0f
             val y = (ctx.line.args["y"] as? Number)?.toFloat() ?: 0f
             val scale = (ctx.line.args["xScale"] as? Number)?.toFloat() ?: (ctx.line.args["scale"] as? Number)?.toFloat() ?: 1f
-            
+
             if (imageKey != null) {
                 ctx.runtime.setBackground(imageKey, duration = duration, x = x, y = y, scale = scale)
             }
         }
+
         register("background") { ctx ->
             val imageKey = ctx.line.args["image"]?.toString() ?: ctx.line.args["file"]?.toString()
-            val duration = (ctx.line.args["time"] as? Number)?.toFloat() ?: 0f
+            val duration = (ctx.line.args["fadetime"] as? Number)?.toFloat() ?: (ctx.line.args["time"] as? Number)?.toFloat() ?: 0f
             if (imageKey != null) {
                 ctx.runtime.setBackground(imageKey, duration = duration)
             }
         }
 
-        // [Character] 改变角色立绘与位置
         register("character") { ctx ->
             val name = ctx.line.args["name"]?.toString()
             val name2 = ctx.line.args["name2"]?.toString()
             val focus = (ctx.line.args["focus"] as? Number)?.toInt() ?: 1
-            
+
             ctx.runtime.updateCharacters(
                 slot1 = name,
                 slot2 = name2,
@@ -70,29 +67,72 @@ object StoryCommandRegistry {
             )
         }
 
-        // [Blocker] 画面遮罩/黑屏闪烁/过渡效果
         register("blocker") { ctx ->
             val a = (ctx.line.args["a"] as? Number)?.toFloat() ?: 0f
             val r = (ctx.line.args["r"] as? Number)?.toFloat() ?: 0f
             val g = (ctx.line.args["g"] as? Number)?.toFloat() ?: 0f
             val b = (ctx.line.args["b"] as? Number)?.toFloat() ?: 0f
-            val time = (ctx.line.args["time"] as? Number)?.toFloat() ?: 0f
+            val time = (ctx.line.args["fadetime"] as? Number)?.toFloat() ?: (ctx.line.args["time"] as? Number)?.toFloat() ?: 0f
             val block = ctx.line.args["block"] == true
+            val style = ctx.line.args["style"]?.toString() ?: "default"
+            val inverse = ctx.line.args["inverse"] == true
 
-            ctx.runtime.setBlocker(r = r, g = g, b = b, a = a, duration = time, isBlocking = block)
+            ctx.runtime.setBlocker(
+                r = r, g = g, b = b, a = a,
+                duration = time,
+                isBlocking = block,
+                style = style,
+                inverse = inverse
+            )
         }
 
-        // [Decision] 分支选项
+        register("cameraeffect") { ctx ->
+            val effect = ctx.line.args["effect"]?.toString() ?: ""
+            val amount = (ctx.line.args["amount"] as? Number)?.toFloat() ?: 1f
+            val duration = (ctx.line.args["fadetime"] as? Number)?.toFloat() ?: 0.4f
+            val block = ctx.line.args["block"] == true
+            val keep = ctx.line.args["keep"] == true
+            val initAmount = (ctx.line.args["initamount"] as? Number)?.toFloat()
+
+            ctx.runtime.setCameraEffect(
+                effect = effect,
+                amount = amount,
+                duration = duration,
+                isBlocking = block,
+                keep = keep,
+                initAmount = initAmount
+            )
+        }
+
+        register("camerashake") { ctx ->
+            val duration = (ctx.line.args["duration"] as? Number)?.toFloat() ?: (ctx.line.args["time"] as? Number)?.toFloat() ?: 0.5f
+            val xstrength = (ctx.line.args["xstrength"] as? Number)?.toFloat() ?: 10f
+            val ystrength = (ctx.line.args["ystrength"] as? Number)?.toFloat() ?: 0f
+            val vibrato = (ctx.line.args["vibrato"] as? Number)?.toInt() ?: 10
+            val randomness = (ctx.line.args["randomness"] as? Number)?.toFloat() ?: 90f
+            val fadeout = ctx.line.args["fadeout"] == true
+            val stop = ctx.line.args["stop"] == true
+
+            ctx.runtime.triggerCameraShake(
+                duration = duration,
+                xStrength = xstrength,
+                yStrength = ystrength,
+                vibrato = vibrato,
+                randomness = randomness,
+                fadeOut = fadeout,
+                stop = stop
+            )
+        }
+
         register("decision") { ctx ->
             val options = ctx.line.args["options"]?.toString()?.split(";") ?: emptyList()
             val values = ctx.line.args["values"]?.toString()?.split(";") ?: emptyList()
-            
+
             if (options.isNotEmpty()) {
                 ctx.runtime.showDecision(options = options, values = values)
             }
         }
 
-        // [Delay] 延迟指令
         register("delay") { ctx ->
             val time = (ctx.line.args["time"] as? Number)?.toFloat() ?: 0f
             if (time > 0) {
@@ -100,7 +140,6 @@ object StoryCommandRegistry {
             }
         }
 
-        // [PlayMusic] / [StopMusic] 背景音乐控制
         register("playmusic") { ctx ->
             val key = ctx.line.args["intro"]?.toString() ?: ctx.line.args["key"]?.toString()
             val volume = (ctx.line.args["volume"] as? Number)?.toFloat() ?: 1f
@@ -108,12 +147,12 @@ object StoryCommandRegistry {
                 ctx.runtime.playMusic(key, volume)
             }
         }
+
         register("stopmusic") { ctx ->
-            val time = (ctx.line.args["time"] as? Number)?.toFloat() ?: 0f
+            val time = (ctx.line.args["fadetime"] as? Number)?.toFloat() ?: (ctx.line.args["time"] as? Number)?.toFloat() ?: 0f
             ctx.runtime.stopMusic(fadeTime = time)
         }
 
-        // [PlaySound] 播放单次音效
         register("playsound") { ctx ->
             val key = ctx.line.args["key"]?.toString()
             if (key != null) {
@@ -121,15 +160,6 @@ object StoryCommandRegistry {
             }
         }
 
-        // [CameraShake] 镜头震动效果
-        register("camerashake") { ctx ->
-            val duration = (ctx.line.args["time"] as? Number)?.toFloat() ?: 0.5f
-            val xstrength = (ctx.line.args["xstrength"] as? Number)?.toFloat() ?: 10f
-            val ystrength = (ctx.line.args["ystrength"] as? Number)?.toFloat() ?: 10f
-            ctx.runtime.triggerCameraShake(duration, xstrength, ystrength)
-        }
-
-        // [Predicate] 条件分支逻辑标记
         register("predicate") { ctx ->
             val references = ctx.line.args["references"]?.toString()?.split(";") ?: emptyList()
             ctx.runtime.applyPredicate(references)

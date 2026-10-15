@@ -18,7 +18,16 @@ data class BlockerState(
     val g: Float = 0f,
     val b: Float = 0f,
     val alpha: Float = 0f,
-    val duration: Float = 0f
+    val duration: Float = 0f,
+    val style: String = "default",
+    val inverse: Boolean = false
+)
+
+data class CameraEffectState(
+    val grayAmount: Float = 0f,
+    val inverseAmount: Float = 0f,
+    val shakeOffsetX: Float = 0f,
+    val shakeOffsetY: Float = 0f
 )
 
 data class DecisionOption(
@@ -51,6 +60,7 @@ data class StoryDisplayState(
     val characterSlot1: CharacterSlotState = CharacterSlotState(),
     val characterSlot2: CharacterSlotState = CharacterSlotState(),
     val blocker: BlockerState = BlockerState(),
+    val cameraEffect: CameraEffectState = CameraEffectState(),
     val dialogue: DialogueState = DialogueState(),
     val decision: DecisionState = DecisionState(),
     val playbackMode: PlaybackMode = PlaybackMode.MANUAL,
