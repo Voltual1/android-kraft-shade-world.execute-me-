@@ -1,8 +1,9 @@
 package me.voltual.asp.ui.components
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -10,13 +11,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import me.voltual.asp.Context
+import me.voltual.asp.engine.rendering.CharacterArtVisual
 import me.voltual.asp.engine.rendering.CharacterCutinSlotState
-import me.voltual.asp.engine.resolveStoryCharacterAssetByKey
+import me.voltual.asp.engine.rendering.FaceOverlayBaker
 import kotlin.math.roundToInt
 
 @Composable
@@ -39,12 +43,37 @@ private fun RenderSingleCutin(
     slot: CharacterCutinSlotState,
     context: Context
 ) {
+    val androidContext = LocalContext.current
     val maskWidthDp = slot.maskW.dp
     val maskHeightDp = slot.maskH.dp
     val targetWidthDp = slot.targetW.dp
     val targetHeightDp = slot.targetH.dp
 
-    // Alignment calculation according to native fadeStyle pivot
+    var currentVisual by remember(slot.characterKey, slot.expression) {
+        mutableStateOf<CharacterArtVisual?>(null)
+    }
+    var oldVisual by remember(slot.oldCharacterKey, slot.oldExpression) {
+        mutableStateOf<CharacterArtVisual?>(null)
+    }
+
+    LaunchedEffect(slot.characterKey, slot.expression) {
+        currentVisual = FaceOverlayBaker.resolveAndBake(
+            context = context,
+            characterKey = slot.characterKey,
+            expression = slot.expression,
+            androidContext = androidContext
+        )
+    }
+
+    LaunchedEffect(slot.oldCharacterKey, slot.oldExpression) {
+        oldVisual = FaceOverlayBaker.resolveAndBake(
+            context = context,
+            characterKey = slot.oldCharacterKey,
+            expression = slot.oldExpression,
+            androidContext = androidContext
+        )
+    }
+
     val maskAlignment = when (slot.fadeStyle) {
         "horiz_expand_left2right" -> Alignment.CenterStart
         "horiz_expand_right2left" -> Alignment.CenterEnd
@@ -53,7 +82,6 @@ private fun RenderSingleCutin(
         else -> Alignment.Center
     }
 
-    // Offset in 1280x720 canvas
     Box(
         modifier = Modifier
             .offset {
@@ -66,7 +94,6 @@ private fun RenderSingleCutin(
             .alpha(slot.alpha),
         contentAlignment = maskAlignment
     ) {
-        // Mask clipping frame
         Box(
             modifier = Modifier
                 .size(width = maskWidthDp, height = maskHeightDp)
@@ -88,31 +115,25 @@ private fun RenderSingleCutin(
             ) {
                 // Previous character visual when crossfading
                 if (slot.oldCharacterKey != null && slot.oldCharAlpha > 0f) {
-                    val oldArtUrl = resolveCharacterArtUrl(context, slot.oldCharacterKey, slot.oldExpression)
-                    if (oldArtUrl != null) {
-                        AsyncImage(
-                            model = oldArtUrl,
-                            contentDescription = null,
-                            contentScale = ContentScale.Fit,
+                    oldVisual?.let { vis ->
+                        RenderArtContent(
+                            visual = vis,
+                            alpha = slot.oldCharAlpha,
                             modifier = Modifier
                                 .fillMaxSize()
-                                .alpha(slot.oldCharAlpha)
                                 .offset(x = slot.charSlotX.dp, y = (slot.charSlotY - 360f).dp)
                         )
                     }
                 }
 
                 // Current incoming character visual
-                val currentArtUrl = resolveCharacterArtUrl(context, slot.characterKey, slot.expression)
-                if (currentArtUrl != null) {
+                currentVisual?.let { vis ->
                     val currentAlpha = if (slot.oldCharacterKey != null) (1f - slot.oldCharAlpha) else 1f
-                    AsyncImage(
-                        model = currentArtUrl,
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
+                    RenderArtContent(
+                        visual = vis,
+                        alpha = currentAlpha,
                         modifier = Modifier
                             .fillMaxSize()
-                            .alpha(currentAlpha)
                             .offset(x = slot.charSlotX.dp, y = (slot.charSlotY - 360f).dp)
                     )
                 }
@@ -121,19 +142,28 @@ private fun RenderSingleCutin(
     }
 }
 
-private fun resolveCharacterArtUrl(context: Context, characterKey: String?, expression: String?): String? {
-    if (characterKey == null) return null
-    val link = context.linkMap[characterKey] ?: return null
-    val item = link.array.find { it.name == expression } ?: link.array.firstOrNull() ?: return null
-
-    val assetKey = if (item.group == -1 && !item.image.isNullOrEmpty()) {
-        item.image
-    } else if (item.group >= 0) {
-        val group = link.groups.getOrNull(item.group)
-        if (group is me.voltual.asp.engine.StoryCharacterGroup.FaceOverlay) group.base else null
-    } else {
-        null
-    } ?: return null
-
-    return resolveStoryCharacterAssetByKey(assetKey)
+@Composable
+private fun RenderArtContent(
+    visual: CharacterArtVisual,
+    alpha: Float,
+    modifier: Modifier = Modifier
+) {
+    when (visual) {
+        is CharacterArtVisual.BakedBitmap -> {
+            Image(
+                bitmap = visual.bitmap.asImageBitmap(),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = modifier.alpha(alpha.coerceIn(0f, 1f))
+            )
+        }
+        is CharacterArtVisual.SingleUrl -> {
+            AsyncImage(
+                model = visual.url,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = modifier.alpha(alpha.coerceIn(0f, 1f))
+            )
+        }
+    }
 }

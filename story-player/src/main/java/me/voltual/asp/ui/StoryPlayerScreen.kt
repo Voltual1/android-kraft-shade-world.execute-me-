@@ -33,14 +33,7 @@ import me.voltual.asp.engine.rendering.shader.ColorEffectKraftShader
 import me.voltual.asp.engine.rendering.shader.FocusEffectKraftShader
 import me.voltual.asp.engine.rendering.shader.SlideMaskKraftShader
 import me.voltual.asp.loadContextByScript
-import me.voltual.asp.ui.components.AnimTextOverlay
-import me.voltual.asp.ui.components.CgItemOverlay
-import me.voltual.asp.ui.components.CharacterCutinOverlay
-import me.voltual.asp.ui.components.CurtainOverlay
-import me.voltual.asp.ui.components.DecisionOverlay
-import me.voltual.asp.ui.components.DialogueBox
-import me.voltual.asp.ui.components.LogAllPanel
-import me.voltual.asp.ui.components.ShowItemOverlay
+import me.voltual.asp.ui.components.*
 import kotlin.math.roundToInt
 
 @Composable
@@ -228,24 +221,13 @@ fun StoryPlayerScreen(
                 }
             }
 
-            // Layer 1: Characters Slots (Left, Middle, Right)
+            // Layer 1: Characters Slots (Left, Middle, Right) - Baked Face Overlay & Precise Anchoring
             state.characters.values.forEach { charSlot ->
-                val charKey = charSlot.characterKey
-                if (charKey != null) {
-                    val charUrl = resolveStoryCharacterAssetByKey(charKey)
-                    if (charUrl != null) {
-                        AsyncImage(
-                            model = charUrl,
-                            contentDescription = null,
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .alpha(charSlot.alpha)
-                                .scale(charSlot.scaleX, charSlot.scaleY)
-                                .offset(charSlot.x.dp, charSlot.y.dp)
-                        )
-                    }
-                }
+                CharacterSlotVisualView(
+                    charSlot = charSlot,
+                    context = curContext,
+                    modifier = Modifier.fillMaxSize()
+                )
             }
 
             // Layer 2: Character Cutin 特写剪影层
