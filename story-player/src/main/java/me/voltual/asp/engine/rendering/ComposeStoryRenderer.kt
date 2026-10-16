@@ -19,6 +19,8 @@ class ComposeStoryRenderer(
     private var pendingDecisionDeferred: CompletableDeferred<DecisionSelection>? = null
     private var isTextTypingComplete = true
     private val cgItemJobs = mutableMapOf<String, MutableList<Job>>()
+    private val animTextJobs = mutableListOf<Job>()
+    private var animTextSessionCounter = 0
 
     private suspend fun tween(
         durationMs: Long,
@@ -83,7 +85,12 @@ class ComposeStoryRenderer(
     }
 
     override suspend fun clearAvgDisplays() {}
-    override suspend fun clearAnimTexts() {}
+
+    override suspend fun clearAnimTexts() {
+        animTextJobs.forEach { it.cancel() }
+        animTextJobs.clear()
+        state.animTexts.clear()
+    }
 
     override suspend fun setCameraEffect(
         effect: String,
@@ -327,6 +334,8 @@ class ComposeStoryRenderer(
         pendingDecisionDeferred?.cancel()
         cgItemJobs.values.flatten().forEach { it.cancel() }
         cgItemJobs.clear()
+        animTextJobs.forEach { it.cancel() }
+        animTextJobs.clear()
         state.dialogue = DialogueVisualState(visible = false)
         state.decision = DecisionVisualState(visible = false)
         state.video = VideoVisualState(visible = false)
@@ -334,6 +343,7 @@ class ComposeStoryRenderer(
         state.curtains.clear()
         state.cutinSlots.clear()
         state.cgItems.clear()
+        state.animTexts.clear()
         state.stickers.clear()
     }
 
@@ -349,7 +359,43 @@ class ComposeStoryRenderer(
         state.video = VideoVisualState(visible = true, url = url)
     }
 
-    override suspend fun setAnimText(input: AnimTextInput) {}
+    override suspend fun setAnimText(input: AnimTextInput) {
+        if (input.name != "group_location_stamp") {
+            onWarning?.invoke("unsupported_visual animtext:${input.name}")
+            return
+        }
+
+        val parsed = parseAnimTextContent(input.content)
+        val session = ++animTextSessionCounter
+        val item = AnimTextVisualItem(
+            id = input.id,
+            sessionId = session,
+            mainText = parsed.mainText,
+            subText = parsed.subText,
+            style = input.style,
+            positionX = input.position.x,
+            positionY = input.position.y,
+            progress = 0f
+        )
+        state.animTexts.add(item)
+
+        val job = coroutineScope.launch {
+            tween(5000L) { progress ->
+                val index = state.animTexts.indexOfFirst { it.sessionId == session }
+                if (index != -1) {
+                    state.animTexts[index] = state.animTexts[index].copy(progress = progress)
+                }
+            }
+            state.animTexts.removeAll { it.sessionId == session }
+        }
+        animTextJobs.add(job)
+        job.invokeOnCompletion { animTextJobs.remove(job) }
+
+        if (input.block) {
+            job.join()
+        }
+    }
+
     override suspend fun setAvgDisplay(input: AvgDisplayInput) {}
 
     override suspend fun setBackground(key: String, input: BackgroundInput?) {

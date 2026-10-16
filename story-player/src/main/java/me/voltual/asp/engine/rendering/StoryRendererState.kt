@@ -1,6 +1,7 @@
 package me.voltual.asp.engine.rendering
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -162,6 +163,17 @@ data class CgItemVisualSlot(
     val height: Int = 0
 )
 
+data class AnimTextVisualItem(
+    val id: String,
+    val sessionId: Int,
+    val mainText: String,
+    val subText: String,
+    val style: String,
+    val positionX: Float,
+    val positionY: Float,
+    val progress: Float = 0f
+)
+
 data class ShowItemVisualState(
     val visible: Boolean = false,
     val key: String = "",
@@ -191,6 +203,7 @@ class StoryRendererState {
     val curtains = mutableStateMapOf<Int, CurtainVisualState>()
     val cutinSlots = mutableStateMapOf<String, CharacterCutinSlotState>()
     val cgItems = mutableStateMapOf<String, CgItemVisualSlot>()
+    val animTexts = mutableStateListOf<AnimTextVisualItem>()
     var dialogue by mutableStateOf(DialogueVisualState())
     var subtitle by mutableStateOf(SubtitleVisualState())
     val stickers = mutableStateMapOf<String, StickerVisualState>()
