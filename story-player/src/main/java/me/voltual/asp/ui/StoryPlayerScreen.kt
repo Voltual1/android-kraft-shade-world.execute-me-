@@ -34,6 +34,7 @@ import me.voltual.asp.engine.rendering.shader.FocusEffectKraftShader
 import me.voltual.asp.engine.rendering.shader.SlideMaskKraftShader
 import me.voltual.asp.loadContextByScript
 import me.voltual.asp.ui.components.CharacterCutinOverlay
+import me.voltual.asp.ui.components.CurtainOverlay
 import me.voltual.asp.ui.components.DecisionOverlay
 import me.voltual.asp.ui.components.DialogueBox
 import me.voltual.asp.ui.components.LogAllPanel
@@ -278,7 +279,13 @@ fun StoryPlayerScreen(
                 )
             }
 
-            // Layer 4: Subtitles & Stickers
+            // Layer 4: Curtain 黑幕多边形羽化裁切层
+            CurtainOverlay(
+                curtains = state.curtains,
+                modifier = Modifier.fillMaxSize()
+            )
+
+            // Layer 5: Subtitles & Stickers
             if (state.subtitle.visible && state.subtitle.text.isNotEmpty()) {
                 Text(
                     text = state.subtitle.text,
@@ -290,19 +297,19 @@ fun StoryPlayerScreen(
                 )
             }
 
-            // Layer 5: Dialogue Box
+            // Layer 6: Dialogue Box
             DialogueBox(
                 dialogue = state.dialogue,
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Layer 6: Decision Overlay
+            // Layer 7: Decision Overlay
             DecisionOverlay(
                 decision = state.decision,
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Layer 7: Fast-Control Top Overlay
+            // Layer 8: Fast-Control Top Overlay
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
