@@ -174,6 +174,20 @@ data class AnimTextVisualItem(
     val progress: Float = 0f
 )
 
+data class SpellStickerVisualState(
+    val id: String,
+    val style: String = "sami",
+    val mainText: String = "",
+    val subText: String = "",
+    val visible: Boolean = true,
+    val alpha: Float = 1f,
+    val x: Float = 0f,
+    val y: Float = 0f,
+    val scaleX: Float = 1f,
+    val scaleY: Float = 1f,
+    val angle: Float = 0f
+)
+
 data class ShowItemVisualState(
     val visible: Boolean = false,
     val key: String = "",
@@ -204,6 +218,7 @@ class StoryRendererState {
     val cutinSlots = mutableStateMapOf<String, CharacterCutinSlotState>()
     val cgItems = mutableStateMapOf<String, CgItemVisualSlot>()
     val animTexts = mutableStateListOf<AnimTextVisualItem>()
+    val spellStickers = mutableStateMapOf<String, SpellStickerVisualState>()
     var dialogue by mutableStateOf(DialogueVisualState())
     var subtitle by mutableStateOf(SubtitleVisualState())
     val stickers = mutableStateMapOf<String, StickerVisualState>()

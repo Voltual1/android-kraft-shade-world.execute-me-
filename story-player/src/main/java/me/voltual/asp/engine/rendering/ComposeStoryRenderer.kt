@@ -297,7 +297,45 @@ class ComposeStoryRenderer(
         }
     }
 
-    override suspend fun clearSpellStickers() {}
+    override suspend fun clearSpellStickers() {
+        state.spellStickers.clear()
+    }
+
+    override suspend fun hideSpellSticker(id: String) {
+        val existing = state.spellStickers[id]
+        if (existing != null) {
+            state.spellStickers[id] = existing.copy(visible = false)
+        }
+    }
+
+    override suspend fun setSpellSticker(input: SpellStickerInput) {
+        val style = input.style.lowercase().let { if (it == "fire" || it == "sami") it else "sami" }
+        val existing = state.spellStickers[input.id]
+        val (defaultMain, defaultSub) = if (style == "fire") {
+            "夜雪无痕，噤声。" to "Ночной снег без следа, молчи."
+        } else {
+            "不是灾异，而是目光。" to "er eigi ógæfa, heldr augna máttur."
+        }
+
+        val parts = parseSpellStickerContent(input.content)
+        val main = parts[1] ?: existing?.mainText ?: defaultMain
+        val sub = parts[2] ?: existing?.subText ?: defaultSub
+
+        val target = SpellStickerVisualState(
+            id = input.id,
+            style = style,
+            mainText = main,
+            subText = sub,
+            visible = true,
+            alpha = input.alpha ?: existing?.alpha ?: 1f,
+            x = input.x ?: existing?.x ?: 0f,
+            y = input.y ?: existing?.y ?: 0f,
+            scaleX = input.xScale ?: existing?.scaleX ?: 1f,
+            scaleY = input.yScale ?: existing?.scaleY ?: 1f,
+            angle = input.angle ?: existing?.angle ?: 0f
+        )
+        state.spellStickers[input.id] = target
+    }
 
     override suspend fun clearSubtitle(fadeMs: Long) {
         val current = state.subtitle
@@ -344,6 +382,7 @@ class ComposeStoryRenderer(
         state.cutinSlots.clear()
         state.cgItems.clear()
         state.animTexts.clear()
+        state.spellStickers.clear()
         state.stickers.clear()
     }
 
@@ -993,8 +1032,6 @@ class ComposeStoryRenderer(
     }
 
     override suspend fun stickerTween(input: StickerTweenInput) {}
-    override suspend fun setSpellSticker(input: SpellStickerInput) {}
-    override suspend fun hideSpellSticker(id: String) {}
 
     override suspend fun setSubtitle(input: SubtitleInput) {
         state.subtitle = SubtitleVisualState(

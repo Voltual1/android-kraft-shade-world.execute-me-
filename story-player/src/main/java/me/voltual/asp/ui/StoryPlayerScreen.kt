@@ -255,7 +255,13 @@ fun StoryPlayerScreen(
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Layer 6: KraftShade Effect View (Camera & Blocker wipe filters & Focus)
+            // Layer 6: SpellSticker 萨米/火焰咒术双语贴纸层
+            SpellStickerOverlay(
+                spellStickers = state.spellStickers,
+                modifier = Modifier.fillMaxSize()
+            )
+
+            // Layer 7: KraftShade Effect View (Camera & Blocker wipe filters & Focus)
             val isKraftActive = (state.blocker.visible && (state.blocker.style == "slider" || state.blocker.style == "verticalslider")) ||
                     state.camera.grayscale > 0f || state.camera.colorInverse > 0f || state.focus.amount > 0f
 
@@ -282,13 +288,13 @@ fun StoryPlayerScreen(
                 )
             }
 
-            // Layer 7: Curtain 黑幕多边形羽化裁切层
+            // Layer 8: Curtain 黑幕多边形羽化裁切层
             CurtainOverlay(
                 curtains = state.curtains,
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Layer 8: Subtitles & Stickers
+            // Layer 9: Subtitles & Stickers
             if (state.subtitle.visible && state.subtitle.text.isNotEmpty()) {
                 Text(
                     text = state.subtitle.text,
@@ -300,19 +306,19 @@ fun StoryPlayerScreen(
                 )
             }
 
-            // Layer 9: Dialogue Box
+            // Layer 10: Dialogue Box
             DialogueBox(
                 dialogue = state.dialogue,
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Layer 10: Decision Overlay
+            // Layer 11: Decision Overlay
             DecisionOverlay(
                 decision = state.decision,
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Layer 11: Fast-Control Top Overlay
+            // Layer 12: Fast-Control Top Overlay
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
