@@ -4,6 +4,13 @@ import com.cardinalblue.kraftshade.shader.TwoTextureInputKraftShader
 import com.cardinalblue.kraftshade.shader.util.GlUniformDelegate
 import org.intellij.lang.annotations.Language
 
+/**
+ * Native port: AVG/[UC]Common/Arts/Materials/slide_mask
+ * Shader: Torappu/UI/AVG/SlideMask
+ *
+ * inputImageTexture: Base color / Background scene
+ * inputImageTexture2: slide_mask.png (slide_left mask texture)
+ */
 class SlideMaskKraftShader : TwoTextureInputKraftShader(
     samplerUniformName = "uTexture",
     secondTextureSampleName = "uMaskTexture"
@@ -64,6 +71,7 @@ uniform float uFlipX;
 uniform float uFlipY;
 
 void main() {
+    // Coordinate mapping with flip consideration
     vec2 uv = vec2(
         mix(textureCoordinate.x, 1.0 - textureCoordinate.x, uFlipX),
         mix(1.0 - textureCoordinate.y, textureCoordinate.y, uFlipY)
@@ -73,8 +81,8 @@ void main() {
     float span = uEnd + progress * (uExtent - uEnd);
     float coord = mix(uv.x, uv.y, uVertical);
     float other = mix(uv.y, uv.x, uVertical);
-    float maskU = (coord - start) / span;
-    float maskA = texture2D(uMaskTexture, vec2(maskU, other)).a;
+    float maskU = (coord - start) / max(span, 0.0001);
+    float maskA = texture2D(uMaskTexture, vec2(clamp(maskU, 0.0, 1.0), other)).a;
     float alphaVal = clamp(maskA + uAlpha, 0.0, 1.0);
     vec4 base = texture2D(uTexture, textureCoordinate);
     gl_FragColor = vec4(base.rgb * alphaVal, alphaVal);

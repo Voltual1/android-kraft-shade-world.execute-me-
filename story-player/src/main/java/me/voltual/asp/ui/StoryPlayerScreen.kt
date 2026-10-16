@@ -1,5 +1,6 @@
 package me.voltual.asp.ui
 
+import android.graphics.BitmapFactory
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -20,13 +21,16 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.cardinalblue.kraftshade.compose.KraftShadeEffectView
 import com.cardinalblue.kraftshade.compose.rememberKraftShadeEffectState
+import com.cardinalblue.kraftshade.shader.buffer.LoadedTexture
 import kotlinx.coroutines.launch
 import me.voltual.asp.Context
+import me.voltual.asp.R
 import me.voltual.asp.engine.*
 import me.voltual.asp.engine.audio.AndroidStoryAudio
 import me.voltual.asp.engine.log.buildLogAll
 import me.voltual.asp.engine.rendering.ComposeStoryRenderer
 import me.voltual.asp.engine.rendering.shader.ColorEffectKraftShader
+import me.voltual.asp.engine.rendering.shader.FocusEffectKraftShader
 import me.voltual.asp.engine.rendering.shader.SlideMaskKraftShader
 import me.voltual.asp.loadContextByScript
 import me.voltual.asp.ui.components.DecisionOverlay
@@ -55,6 +59,13 @@ fun StoryPlayerScreen(
     val kraftEffectState = rememberKraftShadeEffectState()
     val slideMaskShader = remember { SlideMaskKraftShader() }
     val colorEffectShader = remember { ColorEffectKraftShader() }
+    val focusEffectShader = remember { FocusEffectKraftShader() }
+
+    // Cached slide_mask bitmap texture
+    val slideMaskTexture = remember {
+        val bmp = BitmapFactory.decodeResource(androidContext.resources, R.drawable.slide_mask)
+        LoadedTexture(bmp, name = "slide_mask")
+    }
 
     // Initialize context and story engines
     LaunchedEffect(scriptText) {
@@ -103,22 +114,38 @@ fun StoryPlayerScreen(
 
     val state = curRenderer.state
 
-    // Update KraftShade Shader parameters whenever renderer camera / blocker updates
-    LaunchedEffect(state.camera, state.blocker) {
+    // Update KraftShade Shader parameters whenever renderer camera, blocker or focus updates
+    LaunchedEffect(state.camera, state.blocker, state.focus) {
         kraftEffectState.setEffect { targetBuffer ->
             pipeline(targetBuffer) {
                 graphSteps(targetBuffer) {
-                    val (buffer1) = createBufferReferences("pass1")
-                    colorEffectShader.grayAmount = state.camera.grayscale
-                    colorEffectShader.inverseAmount = state.camera.colorInverse
-                    step(colorEffectShader, buffer1)
+                    val isSlideBlocker = state.blocker.visible && (state.blocker.style == "slider" || state.blocker.style == "verticalslider")
+                    val hasFocus = state.focus.amount > 0f
+                    val hasColor = state.camera.grayscale > 0f || state.camera.colorInverse > 0f
 
-                    if (state.blocker.style == "slider" || state.blocker.style == "verticalslider") {
+                    if (isSlideBlocker) {
                         slideMaskShader.alpha = state.blocker.alpha
                         slideMaskShader.setVertical(state.blocker.style == "verticalslider")
                         slideMaskShader.setFlip(state.blocker.flipX, state.blocker.flipY)
+                        slideMaskShader.setSecondInputTexture(slideMaskTexture)
                         step(slideMaskShader, targetBuffer)
-                    } else {
+                    } else if (hasFocus) {
+                        val (passBuffer) = createBufferReferences("focusPass")
+                        focusEffectShader.blurAmount = if (state.focus.blur) state.focus.amount else 0f
+                        focusEffectShader.grayAmount = if (state.focus.colorMode == FocusColorMode.GRAYSCALE) state.focus.amount else 0f
+                        focusEffectShader.inverseAmount = if (state.focus.colorMode == FocusColorMode.COLORINVERSE) state.focus.amount else 0f
+
+                        if (hasColor) {
+                            step(focusEffectShader, passBuffer)
+                            colorEffectShader.grayAmount = state.camera.grayscale
+                            colorEffectShader.inverseAmount = state.camera.colorInverse
+                            step(colorEffectShader, targetBuffer)
+                        } else {
+                            step(focusEffectShader, targetBuffer)
+                        }
+                    } else if (hasColor) {
+                        colorEffectShader.grayAmount = state.camera.grayscale
+                        colorEffectShader.inverseAmount = state.camera.colorInverse
                         step(colorEffectShader, targetBuffer)
                     }
                 }
@@ -216,11 +243,16 @@ fun StoryPlayerScreen(
                 }
             }
 
-            // Layer 2: KraftShade Effect View (Camera & Blocker wipe filters)
-            KraftShadeEffectView(
-                modifier = Modifier.fillMaxSize(),
-                state = kraftEffectState
-            )
+            // Layer 2: KraftShade Effect View (Camera & Blocker wipe filters & Focus)
+            val isKraftActive = (state.blocker.visible && (state.blocker.style == "slider" || state.blocker.style == "verticalslider")) ||
+                    state.camera.grayscale > 0f || state.camera.colorInverse > 0f || state.focus.amount > 0f
+
+            if (isKraftActive) {
+                KraftShadeEffectView(
+                    modifier = Modifier.fillMaxSize(),
+                    state = kraftEffectState
+                )
+            }
 
             // Blocker standard color overlay
             if (state.blocker.visible && state.blocker.style == "default") {

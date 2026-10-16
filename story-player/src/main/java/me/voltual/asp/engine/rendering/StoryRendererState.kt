@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import me.voltual.asp.engine.ColorRgba
 import me.voltual.asp.engine.DialogueLayout
+import me.voltual.asp.engine.FocusColorMode
 import me.voltual.asp.engine.RichTagStyles
 import me.voltual.asp.engine.Vec2
 
@@ -118,6 +119,14 @@ data class CameraVisualState(
     val colorInverse: Float = 0f
 )
 
+data class FocusVisualState(
+    val blur: Boolean = true,
+    val colorMode: FocusColorMode = FocusColorMode.NONE,
+    val amount: Float = 0f,
+    val targetType: String = "",
+    val targetId: String = ""
+)
+
 data class ShowItemVisualState(
     val visible: Boolean = false,
     val key: String = "",
@@ -151,6 +160,7 @@ class StoryRendererState {
     var decision by mutableStateOf(DecisionVisualState())
     var video by mutableStateOf(VideoVisualState())
     var camera by mutableStateOf(CameraVisualState())
+    var focus by mutableStateOf(FocusVisualState())
     var showItem by mutableStateOf<ShowItemVisualState?>(null)
     var timerSticker by mutableStateOf(TimerVisualState())
 }

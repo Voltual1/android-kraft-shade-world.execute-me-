@@ -1,15 +1,11 @@
 package me.voltual.asp.engine.rendering
 
-import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.*
 import me.voltual.asp.Context
 import me.voltual.asp.engine.*
 import me.voltual.asp.engine.rendering.core.buildShakePath
 import me.voltual.asp.engine.rendering.core.dotweenEaseCurve
 import me.voltual.asp.engine.rendering.core.sampleShakePath
-import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.roundToLong
 
 class ComposeStoryRenderer(
     private val context: Context,
@@ -43,10 +39,7 @@ class ComposeStoryRenderer(
         onUpdate(1f)
     }
 
-    override suspend fun clearCgItems(key: String?, fadeMs: Long, ease: String, block: Boolean) {
-        // CG items cleared
-    }
-
+    override suspend fun clearCgItems(key: String?, fadeMs: Long, ease: String, block: Boolean) {}
     override suspend fun clearAvgDisplays() {}
     override suspend fun clearAnimTexts() {}
 
@@ -59,7 +52,6 @@ class ComposeStoryRenderer(
         initialAmount: Float?
     ) {
         val fromGray = initialAmount ?: state.camera.grayscale
-        val fromInverse = state.camera.colorInverse
 
         if (effect == "Colorinverse") {
             state.camera = state.camera.copy(colorInverse = if (keep) 1f else 0f)
@@ -78,8 +70,32 @@ class ComposeStoryRenderer(
         if (block && durationMs > 0) job.join()
     }
 
-    override suspend fun setFocusOut(input: FocusOutInput) {}
-    override fun setFocusParam(input: FocusParamInput) {}
+    override suspend fun setFocusOut(input: FocusOutInput) {
+        val fromAmount = input.from ?: state.focus.amount
+        val toAmount = input.to
+        val durationMs = input.durationMs
+
+        state.focus = state.focus.copy(
+            amount = fromAmount,
+            targetType = input.type,
+            targetId = input.id
+        )
+
+        val job = coroutineScope.launch {
+            tween(durationMs) { progress ->
+                state.focus = state.focus.copy(amount = fromAmount + (toAmount - fromAmount) * progress)
+            }
+            state.focus = state.focus.copy(amount = toAmount)
+        }
+        if (input.block && durationMs > 0) job.join()
+    }
+
+    override fun setFocusParam(input: FocusParamInput) {
+        state.focus = state.focus.copy(
+            blur = input.blur,
+            colorMode = input.color
+        )
+    }
 
     override suspend fun clearBackground(fadeMs: Long, block: Boolean) {
         val current = state.background ?: return
@@ -331,7 +347,6 @@ class ComposeStoryRenderer(
     }
 
     override suspend fun setBlocker(input: BlockerInput) {
-        val isSlide = input.style == "slider" || input.style == "verticalslider"
         val target = BlockerVisualState(
             visible = input.to.a > 0f,
             color = input.to,
