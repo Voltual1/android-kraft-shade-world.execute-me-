@@ -33,6 +33,7 @@ import me.voltual.asp.engine.rendering.shader.ColorEffectKraftShader
 import me.voltual.asp.engine.rendering.shader.FocusEffectKraftShader
 import me.voltual.asp.engine.rendering.shader.SlideMaskKraftShader
 import me.voltual.asp.loadContextByScript
+import me.voltual.asp.ui.components.CharacterCutinOverlay
 import me.voltual.asp.ui.components.DecisionOverlay
 import me.voltual.asp.ui.components.DialogueBox
 import me.voltual.asp.ui.components.LogAllPanel
@@ -243,7 +244,14 @@ fun StoryPlayerScreen(
                 }
             }
 
-            // Layer 2: KraftShade Effect View (Camera & Blocker wipe filters & Focus)
+            // Layer 2: Character Cutin 特写剪影层
+            CharacterCutinOverlay(
+                cutinSlots = state.cutinSlots,
+                context = curContext,
+                modifier = Modifier.fillMaxSize()
+            )
+
+            // Layer 3: KraftShade Effect View (Camera & Blocker wipe filters & Focus)
             val isKraftActive = (state.blocker.visible && (state.blocker.style == "slider" || state.blocker.style == "verticalslider")) ||
                     state.camera.grayscale > 0f || state.camera.colorInverse > 0f || state.focus.amount > 0f
 
@@ -270,7 +278,7 @@ fun StoryPlayerScreen(
                 )
             }
 
-            // Layer 3: Subtitles & Stickers
+            // Layer 4: Subtitles & Stickers
             if (state.subtitle.visible && state.subtitle.text.isNotEmpty()) {
                 Text(
                     text = state.subtitle.text,
@@ -282,19 +290,19 @@ fun StoryPlayerScreen(
                 )
             }
 
-            // Layer 4: Dialogue Box
+            // Layer 5: Dialogue Box
             DialogueBox(
                 dialogue = state.dialogue,
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Layer 5: Decision Overlay
+            // Layer 6: Decision Overlay
             DecisionOverlay(
                 decision = state.decision,
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Layer 6: Fast-Control Top Overlay
+            // Layer 7: Fast-Control Top Overlay
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

@@ -127,6 +127,28 @@ data class FocusVisualState(
     val targetId: String = ""
 )
 
+data class CharacterCutinSlotState(
+    val widgetId: String,
+    val characterKey: String? = null,
+    val expression: String? = null,
+    val alpha: Float = 1f,
+    val rootX: Float = 640f,
+    val rootY: Float = 360f,
+    val maskW: Float = 200f,
+    val maskH: Float = 720f,
+    val targetW: Float = 200f,
+    val targetH: Float = 720f,
+    val povX: Float = 0f,
+    val povY: Float = 0f,
+    val zoom: Float = 1f,
+    val charSlotX: Float = 0f,
+    val charSlotY: Float = 360f,
+    val fadeStyle: String = "fade",
+    val oldCharacterKey: String? = null,
+    val oldExpression: String? = null,
+    val oldCharAlpha: Float = 0f
+)
+
 data class ShowItemVisualState(
     val visible: Boolean = false,
     val key: String = "",
@@ -154,6 +176,7 @@ class StoryRendererState {
     val characters = mutableStateMapOf<String, CharacterVisualSlot>()
     var blocker by mutableStateOf(BlockerVisualState())
     val curtains = mutableStateMapOf<Int, CurtainVisualState>()
+    val cutinSlots = mutableStateMapOf<String, CharacterCutinSlotState>()
     var dialogue by mutableStateOf(DialogueVisualState())
     var subtitle by mutableStateOf(SubtitleVisualState())
     val stickers = mutableStateMapOf<String, StickerVisualState>()

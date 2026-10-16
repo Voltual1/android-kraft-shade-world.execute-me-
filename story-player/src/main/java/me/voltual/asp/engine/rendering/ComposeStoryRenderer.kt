@@ -270,7 +270,14 @@ class ComposeStoryRenderer(
         state.timerSticker = state.timerSticker.copy(visible = false)
     }
 
-    override suspend fun clearCharacterCutin(widgetId: String?) {}
+    override suspend fun clearCharacterCutin(widgetId: String?) {
+        if (widgetId == null) {
+            state.cutinSlots.clear()
+        } else {
+            state.cutinSlots.remove(widgetId)
+        }
+    }
+
     override suspend fun clearInterludes() {}
 
     override fun destroy() {
@@ -281,6 +288,7 @@ class ComposeStoryRenderer(
         state.video = VideoVisualState(visible = false)
         state.characters.clear()
         state.curtains.clear()
+        state.cutinSlots.clear()
         state.stickers.clear()
     }
 
@@ -399,7 +407,174 @@ class ComposeStoryRenderer(
         }
     }
 
-    override suspend fun setCharacterCutin(input: CharacterCutinInput) {}
+    override suspend fun setCharacterCutin(input: CharacterCutinInput) {
+        val widgetId = input.widgetId
+        val existing = state.cutinSlots[widgetId]
+        val fadeStyle = input.fadeStyle ?: existing?.fadeStyle ?: "fade"
+        val isHorizontalExpand = fadeStyle in setOf("horiz_expand_center", "horiz_expand_left2right", "horiz_expand_right2left")
+        val isVerticalExpand = fadeStyle in setOf("vert_expand_center", "vert_expand_top2bottom", "vert_expand_bottom2top")
+        val isExpand = isHorizontalExpand || isVerticalExpand
+
+        // Hide branch
+        if (input.characterKey == null && !input.characterMissing) {
+            if (existing != null) {
+                if (input.fadeMs <= 0) {
+                    state.cutinSlots.remove(widgetId)
+                    return
+                }
+                val job = coroutineScope.launch {
+                    val startAlpha = existing.alpha
+                    val startW = existing.maskW
+                    val startH = existing.maskH
+                    tween(input.fadeMs) { progress ->
+                        if (fadeStyle == "fade") {
+                            state.cutinSlots[widgetId] = existing.copy(alpha = startAlpha * (1f - progress))
+                        } else if (isHorizontalExpand) {
+                            state.cutinSlots[widgetId] = existing.copy(maskW = startW * (1f - progress))
+                        } else {
+                            state.cutinSlots[widgetId] = existing.copy(maskH = startH * (1f - progress))
+                        }
+                    }
+                    state.cutinSlots.remove(widgetId)
+                }
+                if (input.block) job.join()
+            }
+            return
+        }
+
+        // Target geometry calculation
+        val maskH = 720f
+        val maskW = input.width ?: existing?.targetW ?: 200f
+        val rootX = 640f + (input.offsetX ?: existing?.let { it.rootX - 640f } ?: 0f)
+        val rootY = 360f - (input.offsetY ?: existing?.let { 360f - it.rootY } ?: 0f)
+        val povX = input.povX ?: existing?.povX ?: 0f
+        val povY = input.povY ?: existing?.povY ?: 0f
+        val zoom = input.zoom ?: existing?.zoom ?: 1f
+
+        if (existing == null) {
+            // Show branch
+            val initialW = if (isHorizontalExpand) 0f else maskW
+            val initialH = if (isVerticalExpand) 0f else maskH
+            val initialAlpha = if (fadeStyle == "fade") 0f else 1f
+
+            val slotState = CharacterCutinSlotState(
+                widgetId = widgetId,
+                characterKey = input.characterKey,
+                expression = input.expression,
+                alpha = initialAlpha,
+                rootX = rootX,
+                rootY = rootY,
+                maskW = initialW,
+                maskH = initialH,
+                targetW = maskW,
+                targetH = maskH,
+                povX = povX,
+                povY = povY,
+                zoom = zoom,
+                charSlotX = input.charOffsetX ?: 0f,
+                charSlotY = 360f - (input.charOffsetY ?: 0f),
+                fadeStyle = fadeStyle
+            )
+            state.cutinSlots[widgetId] = slotState
+
+            if (input.fadeMs > 0) {
+                val job = coroutineScope.launch {
+                    tween(input.fadeMs) { progress ->
+                        state.cutinSlots[widgetId] = slotState.copy(
+                            alpha = if (fadeStyle == "fade") progress else 1f,
+                            maskW = if (isHorizontalExpand) maskW * progress else maskW,
+                            maskH = if (isVerticalExpand) maskH * progress else maskH
+                        )
+                    }
+                }
+                if (input.block) job.join()
+            } else {
+                state.cutinSlots[widgetId] = slotState.copy(
+                    alpha = 1f,
+                    maskW = maskW,
+                    maskH = maskH
+                )
+            }
+        } else {
+            // SlotUpdate branch
+            val fromRootX = existing.rootX
+            val fromRootY = existing.rootY
+            val fromMaskW = existing.maskW
+            val fromMaskH = existing.maskH
+            val fromPovX = existing.povX
+            val fromPovY = existing.povY
+            val fromZoom = existing.zoom
+            val fromCharSlotX = existing.charSlotX
+            val fromCharSlotY = existing.charSlotY
+
+            val targetCharSlotX = input.charOffsetX ?: fromCharSlotX
+            val targetCharSlotY = 360f - (input.charOffsetY ?: (360f - fromCharSlotY))
+
+            val isSameChar = existing.characterKey == input.characterKey && existing.expression == input.expression
+            val oldKey = if (!isSameChar) existing.characterKey else null
+            val oldExpr = if (!isSameChar) existing.expression else null
+
+            val targetSlotState = existing.copy(
+                characterKey = input.characterKey,
+                expression = input.expression,
+                targetW = maskW,
+                targetH = maskH,
+                fadeStyle = fadeStyle,
+                oldCharacterKey = oldKey,
+                oldExpression = oldExpr,
+                oldCharAlpha = if (!isSameChar) 1f else 0f
+            )
+
+            if (input.fadeMs > 0) {
+                val job = coroutineScope.launch {
+                    tween(input.fadeMs) { progress ->
+                        state.cutinSlots[widgetId] = targetSlotState.copy(
+                            rootX = fromRootX + (rootX - fromRootX) * progress,
+                            rootY = fromRootY + (rootY - fromRootY) * progress,
+                            maskW = fromMaskW + (maskW - fromMaskW) * progress,
+                            maskH = fromMaskH + (maskH - fromMaskH) * progress,
+                            povX = fromPovX + (povX - fromPovX) * progress,
+                            povY = fromPovY + (povY - fromPovY) * progress,
+                            zoom = fromZoom + (zoom - fromZoom) * progress,
+                            charSlotX = fromCharSlotX + (targetCharSlotX - fromCharSlotX) * progress,
+                            charSlotY = fromCharSlotY + (targetCharSlotY - fromCharSlotY) * progress,
+                            oldCharAlpha = 1f - progress
+                        )
+                    }
+                    state.cutinSlots[widgetId] = targetSlotState.copy(
+                        rootX = rootX,
+                        rootY = rootY,
+                        maskW = maskW,
+                        maskH = maskH,
+                        povX = povX,
+                        povY = povY,
+                        zoom = zoom,
+                        charSlotX = targetCharSlotX,
+                        charSlotY = targetCharSlotY,
+                        oldCharacterKey = null,
+                        oldExpression = null,
+                        oldCharAlpha = 0f
+                    )
+                }
+                if (input.block) job.join()
+            } else {
+                state.cutinSlots[widgetId] = targetSlotState.copy(
+                    rootX = rootX,
+                    rootY = rootY,
+                    maskW = maskW,
+                    maskH = maskH,
+                    povX = povX,
+                    povY = povY,
+                    zoom = zoom,
+                    charSlotX = targetCharSlotX,
+                    charSlotY = targetCharSlotY,
+                    oldCharacterKey = null,
+                    oldExpression = null,
+                    oldCharAlpha = 0f
+                )
+            }
+        }
+    }
 
     override suspend fun setCurtain(input: CurtainInput) {
         val dir = input.direction
