@@ -17,7 +17,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 import com.cardinalblue.kraftshade.compose.KraftShadeEffectView
 import com.cardinalblue.kraftshade.compose.rememberKraftShadeEffectState
 import kotlinx.coroutines.launch
@@ -316,8 +316,10 @@ fun StoryPlayerScreen(
 
         // Drawer: Log All Panel
         if (showLogAll) {
-            val logDoc = remember(curContext.scriptText) {
-                buildLogAll(curRuntime.getAutoPlayState().let { curContext.script.map { parseLine(it) } }, curContext.audioVariables)
+            val logDoc = remember(curContext.scriptText, curContext.audioVariables) {
+                val parsedLines = curContext.scriptText?.let { parseStory(it).first }
+                    ?: curContext.script.mapIndexed { index, line -> parseLine(line, index + 1) }
+                buildLogAll(parsedLines, curContext.audioVariables)
             }
             Box(
                 modifier = Modifier
