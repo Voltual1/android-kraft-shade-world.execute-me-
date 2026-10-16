@@ -6,6 +6,7 @@ import me.voltual.asp.engine.*
 import me.voltual.asp.engine.rendering.core.buildShakePath
 import me.voltual.asp.engine.rendering.core.dotweenEaseCurve
 import me.voltual.asp.engine.rendering.core.sampleShakePath
+import kotlin.math.max
 
 class ComposeStoryRenderer(
     private val context: Context,
@@ -17,6 +18,7 @@ class ComposeStoryRenderer(
     private var activeShakeJob: Job? = null
     private var pendingDecisionDeferred: CompletableDeferred<DecisionSelection>? = null
     private var isTextTypingComplete = true
+    private val cgItemJobs = mutableMapOf<String, MutableList<Job>>()
 
     private suspend fun tween(
         durationMs: Long,
@@ -39,7 +41,47 @@ class ComposeStoryRenderer(
         onUpdate(1f)
     }
 
-    override suspend fun clearCgItems(key: String?, fadeMs: Long, ease: String, block: Boolean) {}
+    override suspend fun clearCgItems(key: String?, fadeMs: Long, ease: String, block: Boolean) {
+        val easeCurve = dotweenEaseCurve(ease)
+        if (key != null) {
+            val slot = state.cgItems[key] ?: return
+            cgItemJobs[key]?.forEach { it.cancel() }
+            cgItemJobs.remove(key)
+
+            if (fadeMs <= 0) {
+                state.cgItems.remove(key)
+                return
+            }
+
+            val job = coroutineScope.launch {
+                val startAlpha = slot.alpha
+                tween(fadeMs, ease) { progress ->
+                    state.cgItems[key] = slot.copy(alpha = startAlpha * (1f - progress))
+                }
+                state.cgItems.remove(key)
+            }
+            if (block) job.join()
+        } else {
+            cgItemJobs.values.flatten().forEach { it.cancel() }
+            cgItemJobs.clear()
+
+            if (fadeMs <= 0) {
+                state.cgItems.clear()
+                return
+            }
+
+            coroutineScope.launch {
+                val snapshot = state.cgItems.toMap()
+                tween(fadeMs, ease) { progress ->
+                    snapshot.forEach { (k, item) ->
+                        state.cgItems[k] = item.copy(alpha = item.alpha * (1f - progress))
+                    }
+                }
+                state.cgItems.clear()
+            }
+        }
+    }
+
     override suspend fun clearAvgDisplays() {}
     override suspend fun clearAnimTexts() {}
 
@@ -283,12 +325,15 @@ class ComposeStoryRenderer(
     override fun destroy() {
         activeShakeJob?.cancel()
         pendingDecisionDeferred?.cancel()
+        cgItemJobs.values.flatten().forEach { it.cancel() }
+        cgItemJobs.clear()
         state.dialogue = DialogueVisualState(visible = false)
         state.decision = DecisionVisualState(visible = false)
         state.video = VideoVisualState(visible = false)
         state.characters.clear()
         state.curtains.clear()
         state.cutinSlots.clear()
+        state.cgItems.clear()
         state.stickers.clear()
     }
 
@@ -413,9 +458,7 @@ class ComposeStoryRenderer(
         val fadeStyle = input.fadeStyle ?: existing?.fadeStyle ?: "fade"
         val isHorizontalExpand = fadeStyle in setOf("horiz_expand_center", "horiz_expand_left2right", "horiz_expand_right2left")
         val isVerticalExpand = fadeStyle in setOf("vert_expand_center", "vert_expand_top2bottom", "vert_expand_bottom2top")
-        val isExpand = isHorizontalExpand || isVerticalExpand
 
-        // Hide branch
         if (input.characterKey == null && !input.characterMissing) {
             if (existing != null) {
                 if (input.fadeMs <= 0) {
@@ -442,7 +485,6 @@ class ComposeStoryRenderer(
             return
         }
 
-        // Target geometry calculation
         val maskH = 720f
         val maskW = input.width ?: existing?.targetW ?: 200f
         val rootX = 640f + (input.offsetX ?: existing?.let { it.rootX - 640f } ?: 0f)
@@ -452,7 +494,6 @@ class ComposeStoryRenderer(
         val zoom = input.zoom ?: existing?.zoom ?: 1f
 
         if (existing == null) {
-            // Show branch
             val initialW = if (isHorizontalExpand) 0f else maskW
             val initialH = if (isVerticalExpand) 0f else maskH
             val initialAlpha = if (fadeStyle == "fade") 0f else 1f
@@ -496,7 +537,6 @@ class ComposeStoryRenderer(
                 )
             }
         } else {
-            // SlotUpdate branch
             val fromRootX = existing.rootX
             val fromRootY = existing.rootY
             val fromMaskW = existing.maskW
@@ -778,7 +818,117 @@ class ComposeStoryRenderer(
         }
     }
 
-    override suspend fun showCgItem(input: CgItemInput) {}
+    override suspend fun showCgItem(input: CgItemInput) {
+        val key = input.key
+        cgItemJobs[key]?.forEach { it.cancel() }
+        val jobs = mutableListOf<Job>()
+        cgItemJobs[key] = jobs
+
+        val initialX = input.positionFrom?.x ?: input.positionTo?.x ?: 0f
+        val initialY = input.positionFrom?.y ?: input.positionTo?.y ?: 0f
+        val initialScale = input.scaleFrom
+        val initialAlpha = input.colorFrom?.a ?: input.alphaFrom
+        val initialTint = input.colorFrom
+
+        val targetSlot = CgItemVisualSlot(
+            key = key,
+            assetKey = input.assetKey,
+            x = initialX,
+            y = initialY,
+            scale = initialScale,
+            alpha = initialAlpha,
+            tintRgb = initialTint,
+            rotationDeg = if (input.rotationFrom <= 0f) input.rotationFrom else 0f,
+            width = input.width,
+            height = input.height
+        )
+        state.cgItems[key] = targetSlot
+
+        // Position track
+        if (input.positionFrom != null && input.positionTo != null) {
+            val fromP = input.positionFrom
+            val toP = input.positionTo
+            val pJob = coroutineScope.launch {
+                if (input.positionDelayMs > 0) delay(input.positionDelayMs)
+                tween(input.positionDurationMs, input.ease) { progress ->
+                    val cur = state.cgItems[key] ?: return@tween
+                    state.cgItems[key] = cur.copy(
+                        x = fromP.x + (toP.x - fromP.x) * progress,
+                        y = fromP.y + (toP.y - fromP.y) * progress
+                    )
+                }
+            }
+            jobs.add(pJob)
+        }
+
+        // Scale track
+        if (input.scaleFrom != input.scaleTo) {
+            val fromS = input.scaleFrom
+            val toS = input.scaleTo
+            val sJob = coroutineScope.launch {
+                if (input.scaleDelayMs > 0) delay(input.scaleDelayMs)
+                tween(input.scaleDurationMs, input.ease) { progress ->
+                    val cur = state.cgItems[key] ?: return@tween
+                    state.cgItems[key] = cur.copy(scale = fromS + (toS - fromS) * progress)
+                }
+            }
+            jobs.add(sJob)
+        }
+
+        // Color/Alpha track
+        if (input.colorFrom != null && input.colorTo != null) {
+            val fromC = input.colorFrom
+            val toC = input.colorTo
+            val cJob = coroutineScope.launch {
+                if (input.alphaDelayMs > 0) delay(input.alphaDelayMs)
+                tween(input.alphaDurationMs, input.ease) { progress ->
+                    val cur = state.cgItems[key] ?: return@tween
+                    val r = fromC.r + (toC.r - fromC.r) * progress
+                    val g = fromC.g + (toC.g - fromC.g) * progress
+                    val b = fromC.b + (toC.b - fromC.b) * progress
+                    val a = fromC.a + (toC.a - fromC.a) * progress
+                    state.cgItems[key] = cur.copy(
+                        alpha = a,
+                        tintRgb = ColorRgba(r, g, b, a)
+                    )
+                }
+            }
+            jobs.add(cJob)
+        } else if (input.alphaFrom != input.alphaTo) {
+            val fromA = input.alphaFrom
+            val toA = input.alphaTo
+            val aJob = coroutineScope.launch {
+                if (input.alphaDelayMs > 0) delay(input.alphaDelayMs)
+                tween(input.alphaDurationMs, input.ease) { progress ->
+                    val cur = state.cgItems[key] ?: return@tween
+                    state.cgItems[key] = cur.copy(alpha = fromA + (toA - fromA) * progress)
+                }
+            }
+            jobs.add(aJob)
+        }
+
+        // Rotation track
+        if (input.rotationFrom <= 0f && input.rotationDurationMs > 0) {
+            val fromR = input.rotationFrom
+            val toR = input.rotationTo
+            val rJob = coroutineScope.launch {
+                tween(input.rotationDurationMs, input.ease) { progress ->
+                    val cur = state.cgItems[key] ?: return@tween
+                    state.cgItems[key] = cur.copy(rotationDeg = fromR + (toR - fromR) * progress)
+                }
+            }
+            jobs.add(rJob)
+        } else {
+            val cur = state.cgItems[key]
+            if (cur != null) {
+                state.cgItems[key] = cur.copy(rotationDeg = input.rotationTo)
+            }
+        }
+
+        if (input.block) {
+            jobs.joinAll()
+        }
+    }
 
     override suspend fun setSticker(input: StickerInput) {
         val target = StickerVisualState(

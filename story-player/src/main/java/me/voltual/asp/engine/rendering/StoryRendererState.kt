@@ -149,6 +149,19 @@ data class CharacterCutinSlotState(
     val oldCharAlpha: Float = 0f
 )
 
+data class CgItemVisualSlot(
+    val key: String,
+    val assetKey: String,
+    val x: Float = 0f,
+    val y: Float = 0f,
+    val scale: Float = 1f,
+    val alpha: Float = 1f,
+    val tintRgb: ColorRgba? = null,
+    val rotationDeg: Float = 0f,
+    val width: Int = 0,
+    val height: Int = 0
+)
+
 data class ShowItemVisualState(
     val visible: Boolean = false,
     val key: String = "",
@@ -177,6 +190,7 @@ class StoryRendererState {
     var blocker by mutableStateOf(BlockerVisualState())
     val curtains = mutableStateMapOf<Int, CurtainVisualState>()
     val cutinSlots = mutableStateMapOf<String, CharacterCutinSlotState>()
+    val cgItems = mutableStateMapOf<String, CgItemVisualSlot>()
     var dialogue by mutableStateOf(DialogueVisualState())
     var subtitle by mutableStateOf(SubtitleVisualState())
     val stickers = mutableStateMapOf<String, StickerVisualState>()
