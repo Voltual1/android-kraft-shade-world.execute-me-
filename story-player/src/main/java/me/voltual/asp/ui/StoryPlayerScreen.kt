@@ -39,6 +39,7 @@ import me.voltual.asp.ui.components.CurtainOverlay
 import me.voltual.asp.ui.components.DecisionOverlay
 import me.voltual.asp.ui.components.DialogueBox
 import me.voltual.asp.ui.components.LogAllPanel
+import me.voltual.asp.ui.components.ShowItemOverlay
 import kotlin.math.roundToInt
 
 @Composable
@@ -259,7 +260,13 @@ fun StoryPlayerScreen(
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Layer 4: KraftShade Effect View (Camera & Blocker wipe filters & Focus)
+            // Layer 4: ShowItem 拍立得照片卡片与遮罩层
+            ShowItemOverlay(
+                showItem = state.showItem,
+                modifier = Modifier.fillMaxSize()
+            )
+
+            // Layer 5: KraftShade Effect View (Camera & Blocker wipe filters & Focus)
             val isKraftActive = (state.blocker.visible && (state.blocker.style == "slider" || state.blocker.style == "verticalslider")) ||
                     state.camera.grayscale > 0f || state.camera.colorInverse > 0f || state.focus.amount > 0f
 
@@ -286,13 +293,13 @@ fun StoryPlayerScreen(
                 )
             }
 
-            // Layer 5: Curtain 黑幕多边形羽化裁切层
+            // Layer 6: Curtain 黑幕多边形羽化裁切层
             CurtainOverlay(
                 curtains = state.curtains,
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Layer 6: Subtitles & Stickers
+            // Layer 7: Subtitles & Stickers
             if (state.subtitle.visible && state.subtitle.text.isNotEmpty()) {
                 Text(
                     text = state.subtitle.text,
@@ -304,19 +311,19 @@ fun StoryPlayerScreen(
                 )
             }
 
-            // Layer 7: Dialogue Box
+            // Layer 8: Dialogue Box
             DialogueBox(
                 dialogue = state.dialogue,
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Layer 8: Decision Overlay
+            // Layer 9: Decision Overlay
             DecisionOverlay(
                 decision = state.decision,
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Layer 9: Fast-Control Top Overlay
+            // Layer 10: Fast-Control Top Overlay
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
