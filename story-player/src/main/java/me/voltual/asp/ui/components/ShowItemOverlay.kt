@@ -2,7 +2,6 @@ package me.voltual.asp.ui.components
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -29,7 +28,7 @@ fun ShowItemOverlay(
 
     val url = resolveStoryAssetByKey(showItem.key, StoryAssetFamily.IMAGE) ?: return
     val painter = rememberAsyncImagePainter(model = url)
-    val painterState = painter.state.collectAsState().value
+    val painterState = painter.state
 
     val intrinsicWidth = if (painterState is AsyncImagePainter.State.Success) {
         painter.intrinsicSize.width.takeIf { it > 0f } ?: 800f
