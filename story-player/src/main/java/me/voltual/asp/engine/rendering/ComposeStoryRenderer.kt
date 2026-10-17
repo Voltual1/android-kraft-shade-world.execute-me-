@@ -722,6 +722,8 @@ class ComposeStoryRenderer(
             scaleY = inp.scaleY,
             x = inp.x,
             y = inp.y,
+            widthMultiplier = inp.width ?: 1f,
+            heightMultiplier = inp.height ?: 1f,
             tiled = inp.tiled,
             screenAdapt = inp.screenAdapt
         )
@@ -1452,6 +1454,8 @@ class ComposeStoryRenderer(
             scaleY = inp.scaleY,
             x = inp.x,
             y = inp.y,
+            widthMultiplier = inp.width ?: 1f,
+            heightMultiplier = inp.height ?: 1f,
             tiled = inp.tiled,
             screenAdapt = inp.screenAdapt
         )

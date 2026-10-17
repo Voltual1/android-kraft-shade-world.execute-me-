@@ -18,6 +18,8 @@ data class BackgroundVisualState(
     val scaleY: Float = 1f,
     val x: Float = 0f,
     val y: Float = 0f,
+    val widthMultiplier: Float = 1f,
+    val heightMultiplier: Float = 1f,
     val tiled: Boolean = false,
     val screenAdapt: String? = null
 )

@@ -9,20 +9,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil3.compose.AsyncImage
 import com.cardinalblue.kraftshade.compose.KraftShadeEffectView
 import com.cardinalblue.kraftshade.compose.rememberKraftShadeEffectState
 import com.cardinalblue.kraftshade.model.GlColor
@@ -299,24 +294,16 @@ fun StoryPlayerScreen(
                         }
                     }
             ) {
-                // Layer 0: Background Texture
-                state.background?.let { bg ->
-                    val bgUrl = bg.textureKey?.let { resolveStoryAssetByKey(it, StoryAssetFamily.BACKGROUND) }
-                    if (bgUrl != null) {
-                        AsyncImage(
-                            model = bgUrl,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            colorFilter = bgFocusColorFilter,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .alpha(bg.alpha)
-                                .scale(bg.scaleX, bg.scaleY)
-                                .offset(bg.x.dp, bg.y.dp)
-                                .then(if (bgBlurRadius > 0f) Modifier.blur(bgBlurRadius.dp) else Modifier)
-                        )
-                    }
-                }
+                // Layer 0: Background Texture (Aligned with PPU & ScreenAdapt)
+                BackgroundOverlay(
+                    background = state.background,
+                    context = curContext,
+                    family = StoryAssetFamily.BACKGROUND,
+                    colorFilter = bgFocusColorFilter,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .then(if (bgBlurRadius > 0f) Modifier.blur(bgBlurRadius.dp) else Modifier)
+                )
 
                 // Layer 0.5: Large / Grid Background
                 Box(
@@ -341,25 +328,17 @@ fun StoryPlayerScreen(
                     modifier = Modifier.fillMaxSize()
                 )
 
-                // Layer 1: Foreground Images
-                state.foregroundImage?.let { img ->
-                    val imgUrl = img.textureKey?.let { resolveStoryAssetByKey(it, StoryAssetFamily.IMAGE) }
-                    if (imgUrl != null) {
-                        AsyncImage(
-                            model = imgUrl,
-                            contentDescription = null,
-                            contentScale = ContentScale.Fit,
-                            colorFilter = cgFocusColorFilter,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .alpha(img.alpha)
-                                .rotate(curRenderer.state.imageRotationDeg)
-                                .scale(img.scaleX, img.scaleY)
-                                .offset(img.x.dp, img.y.dp)
-                                .then(if (cgBlurRadius > 0f) Modifier.blur(cgBlurRadius.dp) else Modifier)
-                        )
-                    }
-                }
+                // Layer 1: Foreground Images (Aligned with PPU, ScreenAdapt & Rotation)
+                BackgroundOverlay(
+                    background = state.foregroundImage,
+                    context = curContext,
+                    family = StoryAssetFamily.IMAGE,
+                    rotationDeg = curRenderer.state.imageRotationDeg,
+                    colorFilter = cgFocusColorFilter,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .then(if (cgBlurRadius > 0f) Modifier.blur(cgBlurRadius.dp) else Modifier)
+                )
 
                 // Layer 1.2: AVG Display CG Overlay (cgover)
                 AvgDisplayOverlay(
