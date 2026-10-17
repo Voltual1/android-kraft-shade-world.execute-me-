@@ -43,12 +43,23 @@ data class CharacterVisualSlot(
     val alpha: Float = 1f,
     val scaleX: Float = 1f,
     val scaleY: Float = 1f,
-    val x: Float = 0f,
-    val y: Float = 0f,
+    val actionX: Float = 0f,
+    val actionY: Float = 0f,
+    val zoomShiftX: Float = 0f,
+    val zoomShiftY: Float = 0f,
+    val shakeOffsetX: Float = 0f,
+    val shakeOffsetY: Float = 0f,
+    val jumpOffsetY: Float = 0f,
     val rotationDeg: Float = 0f,
     val dimmed: Boolean = false,
-    val zIndex: Float = 0f
-)
+    val zIndex: Float = 0f,
+    val oldCharacterKey: String? = null,
+    val oldExpression: String? = null,
+    val oldCharAlpha: Float = 0f
+) {
+    val totalOffsetX: Float get() = actionX + zoomShiftX + shakeOffsetX
+    val totalOffsetY: Float get() = shakeOffsetY - actionY - zoomShiftY - jumpOffsetY
+}
 
 data class BlockerVisualState(
     val visible: Boolean = false,

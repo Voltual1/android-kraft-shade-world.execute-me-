@@ -42,6 +42,9 @@ fun CharacterSlotVisualView(
     var visual by remember(charSlot.characterKey, charSlot.expression) {
         mutableStateOf<CharacterArtVisual?>(null)
     }
+    var oldVisual by remember(charSlot.oldCharacterKey, charSlot.oldExpression) {
+        mutableStateOf<CharacterArtVisual?>(null)
+    }
 
     LaunchedEffect(charSlot.characterKey, charSlot.expression) {
         visual = FaceOverlayBaker.resolveAndBake(
@@ -52,7 +55,16 @@ fun CharacterSlotVisualView(
         )
     }
 
-    val currentVisual = visual ?: return
+    LaunchedEffect(charSlot.oldCharacterKey, charSlot.oldExpression) {
+        oldVisual = FaceOverlayBaker.resolveAndBake(
+            context = context,
+            characterKey = charSlot.oldCharacterKey,
+            expression = charSlot.oldExpression,
+            androidContext = androidContext
+        )
+    }
+
+    val currentVisual = visual ?: oldVisual ?: return
     val linkNode = currentVisual.linkNode
 
     // Layout calculation according to AVG native CharacterPanel
@@ -64,8 +76,8 @@ fun CharacterSlotVisualView(
     val baseX = (SLOT_BASE_X[charSlot.slot] ?: 640f) - sizeX / 2f + offsetX
     val baseY = STORY_HEIGHT - sizeY / 2f - offsetY
 
-    val targetX = baseX + charSlot.x
-    val targetY = baseY + charSlot.y
+    val targetX = baseX + charSlot.totalOffsetX
+    val targetY = baseY + charSlot.totalOffsetY
 
     val colorFilter = if (charSlot.dimmed) {
         // Dimmed: 50% brightness
@@ -98,25 +110,53 @@ fun CharacterSlotVisualView(
             .rotate(charSlot.rotationDeg),
         contentAlignment = Alignment.Center
     ) {
-        when (currentVisual) {
-            is CharacterArtVisual.BakedBitmap -> {
-                Image(
-                    bitmap = currentVisual.bitmap.asImageBitmap(),
-                    contentDescription = null,
-                    contentScale = ContentScale.Fit,
+        // Render previous character when crossfading
+        if (charSlot.oldCharacterKey != null && charSlot.oldCharAlpha > 0f) {
+            oldVisual?.let { oldVis ->
+                RenderArtVisual(
+                    art = oldVis,
                     colorFilter = colorFilter,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize().alpha(charSlot.oldCharAlpha.coerceIn(0f, 1f))
                 )
             }
-            is CharacterArtVisual.SingleUrl -> {
-                AsyncImage(
-                    model = currentVisual.url,
-                    contentDescription = null,
-                    contentScale = ContentScale.Fit,
-                    colorFilter = colorFilter,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
+        }
+
+        // Render current character
+        visual?.let { curVis ->
+            val curAlpha = if (charSlot.oldCharacterKey != null) (1f - charSlot.oldCharAlpha) else 1f
+            RenderArtVisual(
+                art = curVis,
+                colorFilter = colorFilter,
+                modifier = Modifier.fillMaxSize().alpha(curAlpha.coerceIn(0f, 1f))
+            )
+        }
+    }
+}
+
+@Composable
+private fun RenderArtVisual(
+    art: CharacterArtVisual,
+    colorFilter: ColorFilter?,
+    modifier: Modifier = Modifier
+) {
+    when (art) {
+        is CharacterArtVisual.BakedBitmap -> {
+            Image(
+                bitmap = art.bitmap.asImageBitmap(),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                colorFilter = colorFilter,
+                modifier = modifier
+            )
+        }
+        is CharacterArtVisual.SingleUrl -> {
+            AsyncImage(
+                model = art.url,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                colorFilter = colorFilter,
+                modifier = modifier
+            )
         }
     }
 }

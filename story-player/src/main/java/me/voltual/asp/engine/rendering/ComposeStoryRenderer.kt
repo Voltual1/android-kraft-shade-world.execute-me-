@@ -7,6 +7,21 @@ import me.voltual.asp.engine.rendering.core.buildShakePath
 import me.voltual.asp.engine.rendering.core.dotweenEaseCurve
 import me.voltual.asp.engine.rendering.core.sampleShakePath
 import kotlin.math.max
+import kotlin.random.Random
+
+private val CHARSLOT_POINT_DEFAULT = Vec2(1f, 1f)
+
+private data class SlotMoveRange(val from: Vec2, val to: Vec2)
+private data class SlotZoomRange(
+    val fromScaleX: Float,
+    val fromScaleY: Float,
+    val fromShiftX: Float,
+    val fromShiftY: Float,
+    val toScaleX: Float,
+    val toScaleY: Float,
+    val toShiftX: Float,
+    val toShiftY: Float
+)
 
 class ComposeStoryRenderer(
     private val context: Context,
@@ -21,6 +36,20 @@ class ComposeStoryRenderer(
     private val cgItemJobs = mutableMapOf<String, MutableList<Job>>()
     private val animTextJobs = mutableListOf<Job>()
     private var animTextSessionCounter = 0
+
+    // Character slot running animation jobs management
+    private val charSlotJobs = mutableMapOf<String, MutableList<Job>>()
+
+    private fun cancelCharSlotJobs(slot: String) {
+        charSlotJobs[slot]?.forEach { it.cancel() }
+        charSlotJobs[slot]?.clear()
+    }
+
+    private fun addCharSlotJob(slot: String, job: Job) {
+        val list = charSlotJobs.getOrPut(slot) { mutableListOf() }
+        list.add(job)
+        job.invokeOnCompletion { list.remove(job) }
+    }
 
     private suspend fun tween(
         durationMs: Long,
@@ -164,6 +193,7 @@ class ComposeStoryRenderer(
 
     override suspend fun clearCharacters(slot: String?, fadeMs: Long) {
         if (slot != null) {
+            cancelCharSlotJobs(slot)
             val current = state.characters[slot] ?: return
             if (fadeMs <= 0) {
                 state.characters.remove(slot)
@@ -177,6 +207,7 @@ class ComposeStoryRenderer(
                 state.characters.remove(slot)
             }
         } else {
+            charSlotJobs.keys.toList().forEach { cancelCharSlotJobs(it) }
             if (fadeMs <= 0) {
                 state.characters.clear()
                 return
@@ -374,6 +405,8 @@ class ComposeStoryRenderer(
         cgItemJobs.clear()
         animTextJobs.forEach { it.cancel() }
         animTextJobs.clear()
+        charSlotJobs.values.flatten().forEach { it.cancel() }
+        charSlotJobs.clear()
         state.dialogue = DialogueVisualState(visible = false)
         state.decision = DecisionVisualState(visible = false)
         state.video = VideoVisualState(visible = false)
@@ -517,30 +550,272 @@ class ComposeStoryRenderer(
         }
     }
 
+    private fun characterSlotMove(current: CharacterVisualSlot, input: CharacterSlotInput): SlotMoveRange? {
+        val posTo = input.positionTo ?: CHARSLOT_POINT_DEFAULT
+        return when (input.action) {
+            null, "move", "setpos" -> {
+                if (input.positionFrom == null) null
+                else SlotMoveRange(from = input.positionFrom, to = posTo)
+            }
+            "shakemove" -> {
+                SlotMoveRange(from = input.positionFrom ?: CHARSLOT_POINT_DEFAULT, to = posTo)
+            }
+            "jump" -> {
+                if ((input.durationMs ?: 0L) > 0L) {
+                    SlotMoveRange(
+                        from = Vec2(current.actionX, current.actionY),
+                        to = Vec2(current.actionX + posTo.x, current.actionY + posTo.y)
+                    )
+                } else {
+                    SlotMoveRange(from = input.positionFrom ?: CHARSLOT_POINT_DEFAULT, to = posTo)
+                }
+            }
+            else -> null
+        }
+    }
+
+    private fun characterSlotZoom(current: CharacterVisualSlot, input: CharacterSlotInput): SlotZoomRange? {
+        if (input.action != "zoom") return null
+        val zoom = input.posZoom
+        val pivotValid = zoom == null || (zoom.x in 0f..1f && zoom.y in 0f..1f)
+        if (!pivotValid) return null
+
+        val toScaleX = input.scaleX ?: 1f
+        val toScaleY = input.scaleY ?: 1f
+        val pivotX = zoom?.x ?: 0.5f
+        val pivotY = zoom?.y ?: 0.5f
+
+        val charWidth = 1024f
+        val charHeight = 1024f
+
+        return SlotZoomRange(
+            fromScaleX = current.scaleX,
+            fromScaleY = current.scaleY,
+            fromShiftX = current.zoomShiftX,
+            fromShiftY = current.zoomShiftY,
+            toScaleX = toScaleX,
+            toScaleY = toScaleY,
+            toShiftX = (0.5f - pivotX) * toScaleX * charWidth - ((toScaleX - 1f) * charWidth) / 2f,
+            toShiftY = (0.5f - pivotY) * toScaleY * charHeight + ((toScaleY - 1f) * charHeight) / 2f
+        )
+    }
+
     override suspend fun setCharacter(input: CharacterSlotInput) {
         val slot = input.slot
         val current = state.characters[slot] ?: CharacterVisualSlot(slot = slot)
-        val target = current.copy(
-            characterKey = input.characterKey ?: current.characterKey,
-            expression = input.expression ?: current.expression,
-            alpha = input.alphaTo ?: (if ((input.durationMs ?: 0L) > 0) 0f else 1f),
-            scaleX = input.scaleX ?: current.scaleX,
-            scaleY = input.scaleY ?: current.scaleY,
-            x = input.positionTo?.x ?: current.x,
-            y = input.positionTo?.y ?: current.y,
-            dimmed = input.dimmed
-        )
-        state.characters[slot] = target
         val durationMs = input.durationMs ?: 0L
-        if (durationMs > 0 && (input.alphaFrom != null || input.alphaTo != null)) {
-            val fromA = input.alphaFrom ?: current.alpha
-            val toA = input.alphaTo ?: 1f
-            val job = coroutineScope.launch {
-                tween(durationMs) { progress ->
-                    state.characters[slot] = target.copy(alpha = fromA + (toA - fromA) * progress)
+        val jobs = mutableListOf<Job>()
+
+        // 1. Focus management
+        if (input.focusMode != null && input.focusSlots != null) {
+            val activeSet = input.focusSlots.toSet()
+            state.characters.forEach { (s, c) ->
+                state.characters[s] = c.copy(dimmed = !activeSet.contains(s))
+            }
+        }
+
+        // 2. Character image swap & crossfade
+        var updated = current
+        val hasNewChar = input.characterKey != null && input.expression != null
+        val isDifferentChar = hasNewChar && (input.characterKey != current.characterKey || input.expression != current.expression)
+
+        if (hasNewChar) {
+            val replaceFade = input.replaceFadeMs ?: durationMs
+            if (isDifferentChar && replaceFade > 0 && current.characterKey != null) {
+                updated = current.copy(
+                    characterKey = input.characterKey,
+                    expression = input.expression,
+                    oldCharacterKey = current.characterKey,
+                    oldExpression = current.expression,
+                    oldCharAlpha = 1f
+                )
+                state.characters[slot] = updated
+                val fadeJob = coroutineScope.launch {
+                    tween(replaceFade) { progress ->
+                        val cur = state.characters[slot] ?: return@tween
+                        state.characters[slot] = cur.copy(oldCharAlpha = 1f - progress)
+                    }
+                    val cur = state.characters[slot]
+                    if (cur != null) {
+                        state.characters[slot] = cur.copy(
+                            oldCharacterKey = null,
+                            oldExpression = null,
+                            oldCharAlpha = 0f
+                        )
+                    }
+                }
+                jobs.add(fadeJob)
+                addCharSlotJob(slot, fadeJob)
+            } else {
+                updated = current.copy(
+                    characterKey = input.characterKey,
+                    expression = input.expression,
+                    oldCharacterKey = null,
+                    oldExpression = null,
+                    oldCharAlpha = 0f
+                )
+                state.characters[slot] = updated
+            }
+        }
+
+        // 3. Movement
+        val move = characterSlotMove(updated, input)
+        if (move != null) {
+            if (durationMs > 0 && input.action != "setpos") {
+                val moveJob = coroutineScope.launch {
+                    tween(durationMs) { progress ->
+                        val cur = state.characters[slot] ?: return@tween
+                        state.characters[slot] = cur.copy(
+                            actionX = move.from.x + (move.to.x - move.from.x) * progress,
+                            actionY = move.from.y + (move.to.y - move.from.y) * progress
+                        )
+                    }
+                    val cur = state.characters[slot]
+                    if (cur != null) {
+                        state.characters[slot] = cur.copy(actionX = move.to.x, actionY = move.to.y)
+                    }
+                }
+                jobs.add(moveJob)
+                addCharSlotJob(slot, moveJob)
+            } else {
+                updated = updated.copy(actionX = move.to.x, actionY = move.to.y)
+                state.characters[slot] = updated
+            }
+        }
+
+        // 4. Zoom
+        val zoom = characterSlotZoom(updated, input)
+        if (zoom != null) {
+            if (durationMs > 0) {
+                val zoomJob = coroutineScope.launch {
+                    tween(durationMs) { progress ->
+                        val cur = state.characters[slot] ?: return@tween
+                        state.characters[slot] = cur.copy(
+                            scaleX = zoom.fromScaleX + (zoom.toScaleX - zoom.fromScaleX) * progress,
+                            scaleY = zoom.fromScaleY + (zoom.toScaleY - zoom.fromScaleY) * progress,
+                            zoomShiftX = zoom.fromShiftX + (zoom.toShiftX - zoom.fromShiftX) * progress,
+                            zoomShiftY = zoom.fromShiftY + (zoom.toShiftY - zoom.fromShiftY) * progress
+                        )
+                    }
+                    val cur = state.characters[slot]
+                    if (cur != null) {
+                        state.characters[slot] = cur.copy(
+                            scaleX = zoom.toScaleX,
+                            scaleY = zoom.toScaleY,
+                            zoomShiftX = zoom.toShiftX,
+                            zoomShiftY = zoom.toShiftY
+                        )
+                    }
+                }
+                jobs.add(zoomJob)
+                addCharSlotJob(slot, zoomJob)
+            } else {
+                updated = updated.copy(
+                    scaleX = zoom.toScaleX,
+                    scaleY = zoom.toScaleY,
+                    zoomShiftX = zoom.toShiftX,
+                    zoomShiftY = zoom.toShiftY
+                )
+                state.characters[slot] = updated
+            }
+        }
+
+        // 5. Shake & Shakemove
+        if ((input.action == "shake" || input.action == "shakemove") && durationMs > 0) {
+            val power = max(0f, input.power ?: 10f)
+            val randomness = (input.randomness ?: 90).coerceIn(0, 100)
+            val times = max(1, input.times ?: 10)
+            val interval = max(16L, durationMs / times)
+            val shakeJob = coroutineScope.launch {
+                val startTime = System.currentTimeMillis()
+                while (System.currentTimeMillis() - startTime < durationMs) {
+                    val roll = Random.nextInt(1, 101)
+                    val factor = if (roll < randomness) Random.nextFloat() * 2f - 1f else 0f
+                    val cur = state.characters[slot] ?: break
+                    state.characters[slot] = cur.copy(
+                        shakeOffsetX = factor * power,
+                        shakeOffsetY = factor * power
+                    )
+                    delay(interval)
+                }
+                val cur = state.characters[slot]
+                if (cur != null) {
+                    state.characters[slot] = cur.copy(shakeOffsetX = 0f, shakeOffsetY = 0f)
                 }
             }
-            if (input.block) job.join()
+            jobs.add(shakeJob)
+            addCharSlotJob(slot, shakeJob)
+        }
+
+        // 6. Jump
+        if (input.action == "jump" && durationMs > 0) {
+            val power = max(0f, input.power ?: 20f)
+            val times = max(1, input.times ?: 1)
+            val singleJumpMs = max(16L, durationMs / times)
+            val jumpJob = coroutineScope.launch {
+                repeat(times) {
+                    tween(singleJumpMs) { progress ->
+                        val cycle = if (progress <= 0.5f) progress / 0.5f else (1f - progress) / 0.5f
+                        val cur = state.characters[slot] ?: return@tween
+                        state.characters[slot] = cur.copy(jumpOffsetY = power * cycle)
+                    }
+                }
+                val cur = state.characters[slot]
+                if (cur != null) {
+                    state.characters[slot] = cur.copy(jumpOffsetY = 0f)
+                }
+            }
+            jobs.add(jumpJob)
+            addCharSlotJob(slot, jumpJob)
+        }
+
+        // 7. Rotation
+        if (input.angle != null) {
+            val fromAngle = updated.rotationDeg
+            val dir = if (input.inverse == true) -1f else 1f
+            val toAngle = dir * (input.angle + 360f * (input.circles ?: 0))
+            if (durationMs > 0) {
+                val rotateJob = coroutineScope.launch {
+                    tween(durationMs) { progress ->
+                        val cur = state.characters[slot] ?: return@tween
+                        state.characters[slot] = cur.copy(
+                            rotationDeg = fromAngle + (toAngle - fromAngle) * progress
+                        )
+                    }
+                }
+                jobs.add(rotateJob)
+                addCharSlotJob(slot, rotateJob)
+            } else {
+                updated = updated.copy(rotationDeg = toAngle)
+                state.characters[slot] = updated
+            }
+        }
+
+        // 8. Opacity
+        if (input.alphaFrom != null || input.alphaTo != null) {
+            val fromA = input.alphaFrom ?: updated.alpha
+            val toA = input.alphaTo ?: fromA
+            if (durationMs > 0) {
+                val alphaJob = coroutineScope.launch {
+                    tween(durationMs) { progress ->
+                        val cur = state.characters[slot] ?: return@tween
+                        state.characters[slot] = cur.copy(alpha = fromA + (toA - fromA) * progress)
+                    }
+                    val cur = state.characters[slot]
+                    if (cur != null) {
+                        state.characters[slot] = cur.copy(alpha = toA)
+                    }
+                }
+                jobs.add(alphaJob)
+                addCharSlotJob(slot, alphaJob)
+            } else {
+                updated = updated.copy(alpha = toA)
+                state.characters[slot] = updated
+            }
+        }
+
+        if (input.block && jobs.isNotEmpty()) {
+            jobs.joinAll()
         }
     }
 
@@ -762,20 +1037,151 @@ class ComposeStoryRenderer(
     override suspend fun runCharacterAction(input: CharacterActionInput) {
         val slot = input.slot
         val current = state.characters[slot] ?: return
-        val fromX = current.x
-        val fromY = current.y
-        val toX = fromX + input.xOffset
-        val toY = fromY + input.yOffset
+        cancelCharSlotJobs(slot)
 
-        val job = coroutineScope.launch {
-            tween(input.durationMs) { progress ->
-                state.characters[slot] = current.copy(
-                    x = fromX + (toX - fromX) * progress,
-                    y = fromY + (toY - fromY) * progress
-                )
+        when (input.type) {
+            "move" -> {
+                val fromX = current.actionX
+                val fromY = current.actionY
+                val toX = fromX + input.xOffset
+                val toY = fromY + input.yOffset
+                val job = coroutineScope.launch {
+                    tween(input.durationMs) { progress ->
+                        val cur = state.characters[slot] ?: return@tween
+                        state.characters[slot] = cur.copy(
+                            actionX = fromX + (toX - fromX) * progress,
+                            actionY = fromY + (toY - fromY) * progress
+                        )
+                    }
+                    val cur = state.characters[slot]
+                    if (cur != null) {
+                        state.characters[slot] = cur.copy(actionX = toX, actionY = toY)
+                    }
+                }
+                addCharSlotJob(slot, job)
+                if (input.block && input.durationMs > 0) job.join()
+            }
+            "jump" -> {
+                val fromX = current.actionX
+                val fromY = current.actionY
+                val toX = fromX + input.xOffset
+                val toY = fromY + input.yOffset
+                val power = max(0f, input.power)
+                val times = max(1, input.times)
+                val singleJumpMs = max(16L, input.durationMs / times)
+
+                val job = coroutineScope.launch {
+                    launch {
+                        repeat(times) {
+                            tween(singleJumpMs) { progress ->
+                                val cycle = if (progress <= 0.5f) progress / 0.5f else (1f - progress) / 0.5f
+                                val cur = state.characters[slot] ?: return@tween
+                                state.characters[slot] = cur.copy(jumpOffsetY = power * cycle)
+                            }
+                        }
+                        val cur = state.characters[slot]
+                        if (cur != null) {
+                            state.characters[slot] = cur.copy(jumpOffsetY = 0f)
+                        }
+                    }
+                    tween(input.durationMs) { progress ->
+                        val cur = state.characters[slot] ?: return@tween
+                        state.characters[slot] = cur.copy(
+                            actionX = fromX + (toX - fromX) * progress,
+                            actionY = fromY + (toY - fromY) * progress
+                        )
+                    }
+                    val cur = state.characters[slot]
+                    if (cur != null) {
+                        state.characters[slot] = cur.copy(actionX = toX, actionY = toY)
+                    }
+                }
+                addCharSlotJob(slot, job)
+                if (input.block && input.durationMs > 0) job.join()
+            }
+            "shake" -> {
+                if (input.stop || input.power <= 0f) {
+                    state.characters[slot] = current.copy(shakeOffsetX = 0f, shakeOffsetY = 0f)
+                    return
+                }
+                val power = input.power
+                val randomness = input.randomness.toInt().coerceIn(0, 100)
+                val times = max(1, input.times)
+                val interval = max(16L, input.durationMs / times)
+
+                val job = coroutineScope.launch {
+                    val startTime = System.currentTimeMillis()
+                    while (System.currentTimeMillis() - startTime < input.durationMs) {
+                        val roll = Random.nextInt(1, 101)
+                        val factor = if (roll < randomness) Random.nextFloat() * 2f - 1f else 0f
+                        val cur = state.characters[slot] ?: break
+                        state.characters[slot] = cur.copy(
+                            shakeOffsetX = factor * power,
+                            shakeOffsetY = factor * power
+                        )
+                        delay(interval)
+                    }
+                    val cur = state.characters[slot]
+                    if (cur != null) {
+                        state.characters[slot] = cur.copy(shakeOffsetX = 0f, shakeOffsetY = 0f)
+                    }
+                }
+                addCharSlotJob(slot, job)
+                if (input.block && input.durationMs > 0) job.join()
+            }
+            "zoom" -> {
+                val fromScaleX = current.scaleX
+                val fromScaleY = current.scaleY
+                val toScaleX = input.scaleX ?: fromScaleX
+                val toScaleY = input.scaleY ?: fromScaleY
+                val fromX = current.actionX
+                val fromY = current.actionY
+                val toX = fromX + input.xOffset
+                val toY = fromY + input.yOffset
+
+                val job = coroutineScope.launch {
+                    tween(input.durationMs) { progress ->
+                        val cur = state.characters[slot] ?: return@tween
+                        state.characters[slot] = cur.copy(
+                            scaleX = fromScaleX + (toScaleX - fromScaleX) * progress,
+                            scaleY = fromScaleY + (toScaleY - fromScaleY) * progress,
+                            actionX = fromX + (toX - fromX) * progress,
+                            actionY = fromY + (toY - fromY) * progress
+                        )
+                    }
+                    val cur = state.characters[slot]
+                    if (cur != null) {
+                        state.characters[slot] = cur.copy(
+                            scaleX = toScaleX,
+                            scaleY = toScaleY,
+                            actionX = toX,
+                            actionY = toY
+                        )
+                    }
+                }
+                addCharSlotJob(slot, job)
+                if (input.block && input.durationMs > 0) job.join()
+            }
+            "exit" -> {
+                val toX = if (input.direction == "left") -1280f else 1280f
+                val fromX = current.actionX
+                val fromY = current.actionY
+                val toY = fromY + input.yOffset
+
+                val job = coroutineScope.launch {
+                    tween(input.durationMs) { progress ->
+                        val cur = state.characters[slot] ?: return@tween
+                        state.characters[slot] = cur.copy(
+                            actionX = fromX + (toX - fromX) * progress,
+                            actionY = fromY + (toY - fromY) * progress
+                        )
+                    }
+                    state.characters.remove(slot)
+                }
+                addCharSlotJob(slot, job)
+                if (input.block && input.durationMs > 0) job.join()
             }
         }
-        if (input.block && input.durationMs > 0) job.join()
     }
 
     override fun setDialogue(
