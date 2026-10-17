@@ -398,6 +398,12 @@ fun StoryPlayerScreen(
                 modifier = Modifier.fillMaxSize()
             )
 
+            // Layer 9.6: Timer Sticker (正向秒表贴纸)
+            TimerStickerOverlay(
+                timer = state.timerSticker,
+                modifier = Modifier.fillMaxSize()
+            )
+
             // Layer 10: Dialogue Box
             DialogueBox(
                 dialogue = state.dialogue,

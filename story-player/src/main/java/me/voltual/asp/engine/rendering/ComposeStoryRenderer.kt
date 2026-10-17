@@ -54,6 +54,13 @@ private data class TimedStickerStep(
     val step: StickerTweenStep
 )
 
+private fun formatTimer(totalSeconds: Long): String {
+    val hours = (totalSeconds / 3600) % 24
+    val minutes = (totalSeconds % 3600) / 60
+    val seconds = totalSeconds % 60
+    return String.format("%02d:%02d:%02d", hours, minutes, seconds)
+}
+
 class ComposeStoryRenderer(
     private val context: Context,
     val state: StoryRendererState = StoryRendererState(),
@@ -75,6 +82,9 @@ class ComposeStoryRenderer(
     private val stickerTweenQueues = mutableMapOf<String, MutableList<StickerTweenStep>>()
     private val stickerTweenSessionIds = mutableMapOf<String, Int>()
     private val stickerJobs = mutableMapOf<String, MutableList<Job>>()
+
+    private var timerCountJob: Job? = null
+    private var timerFadeJob: Job? = null
 
     private fun cancelCharSlotJobs(slot: String) {
         charSlotJobs[slot]?.forEach { it.cancel() }
@@ -460,7 +470,23 @@ class ComposeStoryRenderer(
     }
 
     override suspend fun clearTimerSticker(input: TimerClearInput?) {
-        state.timerSticker = state.timerSticker.copy(visible = false)
+        timerCountJob?.cancel()
+        timerCountJob = null
+        timerFadeJob?.cancel()
+
+        val durationMs = input?.durationMs ?: 0L
+        if (durationMs <= 0L) {
+            state.timerSticker = state.timerSticker.copy(visible = false, alpha = 0f)
+            return
+        }
+
+        val startAlpha = state.timerSticker.alpha
+        timerFadeJob = coroutineScope.launch {
+            tween(durationMs) { progress ->
+                state.timerSticker = state.timerSticker.copy(alpha = startAlpha * (1f - progress))
+            }
+            state.timerSticker = state.timerSticker.copy(visible = false, alpha = 0f)
+        }
     }
 
     override suspend fun clearCharacterCutin(widgetId: String?) {
@@ -494,6 +520,10 @@ class ComposeStoryRenderer(
         focusJobs.values.forEach { it.cancel() }
         focusJobs.clear()
         internalFocusStates.clear()
+        timerCountJob?.cancel()
+        timerCountJob = null
+        timerFadeJob?.cancel()
+        timerFadeJob = null
         state.dialogue = DialogueVisualState(visible = false)
         state.decision = DecisionVisualState(visible = false)
         state.video = VideoVisualState(visible = false)
@@ -505,6 +535,7 @@ class ComposeStoryRenderer(
         state.animTexts.clear()
         state.spellStickers.clear()
         state.stickers.clear()
+        state.timerSticker = TimerVisualState(visible = false)
     }
 
     override fun finishTextTyping(): Boolean {
@@ -1807,15 +1838,53 @@ class ComposeStoryRenderer(
     }
 
     override suspend fun setTimerSticker(input: TimerStickerInput) {
-        state.timerSticker = TimerVisualState(
+        timerCountJob?.cancel()
+        timerFadeJob?.cancel()
+
+        val capSeconds = input.limitSeconds?.takeIf { it > 0 }
+        val startFormatted = formatTimer(0L)
+
+        val target = TimerVisualState(
             visible = true,
-            timeFormatted = "00:00:00",
-            alpha = input.toAlpha,
+            timeFormatted = startFormatted,
+            alpha = input.fromAlpha,
             x = input.x,
             y = input.y,
             sizePx = input.sizePx,
             widthPx = input.widthPx
         )
+        state.timerSticker = target
+
+        // 1. Positive stopwatch count up task
+        if (capSeconds != null) {
+            val startMs = System.currentTimeMillis()
+            timerCountJob = coroutineScope.launch {
+                while (isActive) {
+                    val elapsedSeconds = minOf(
+                        capSeconds.toLong(),
+                        maxOf(0L, (System.currentTimeMillis() - startMs) / 1000L)
+                    )
+                    state.timerSticker = state.timerSticker.copy(
+                        timeFormatted = formatTimer(elapsedSeconds)
+                    )
+                    if (elapsedSeconds >= capSeconds.toLong()) {
+                        break
+                    }
+                    delay(200)
+                }
+            }
+        }
+
+        // 2. Alpha fade-in tween
+        val durationMs = if (input.durationMs > 0L) input.durationMs else 130L
+        timerFadeJob = coroutineScope.launch {
+            tween(durationMs) { progress ->
+                state.timerSticker = state.timerSticker.copy(
+                    alpha = input.fromAlpha + (input.toAlpha - input.fromAlpha) * progress
+                )
+            }
+            state.timerSticker = state.timerSticker.copy(alpha = input.toAlpha)
+        }
     }
 
     override suspend fun shakeCamera(input: CameraShakeInput) {
