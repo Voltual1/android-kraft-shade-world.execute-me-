@@ -78,6 +78,7 @@ class ComposeStoryRenderer(
     private val interludeJobs = mutableMapOf<Int, MutableList<Job>>()
     private val focusJobs = mutableMapOf<String, Job>()
     private val internalFocusStates = mutableMapOf<String, Float>()
+    private val avgDisplayJobs = mutableMapOf<String, Job>()
 
     private val stickerTweenQueues = mutableMapOf<String, MutableList<StickerTweenStep>>()
     private val stickerTweenSessionIds = mutableMapOf<String, Int>()
@@ -181,7 +182,11 @@ class ComposeStoryRenderer(
         }
     }
 
-    override suspend fun clearAvgDisplays() {}
+    override suspend fun clearAvgDisplays() {
+        avgDisplayJobs.values.forEach { it.cancel() }
+        avgDisplayJobs.clear()
+        state.avgDisplays.clear()
+    }
 
     override suspend fun clearAnimTexts() {
         animTextJobs.forEach { it.cancel() }
@@ -524,6 +529,8 @@ class ComposeStoryRenderer(
         timerCountJob = null
         timerFadeJob?.cancel()
         timerFadeJob = null
+        avgDisplayJobs.values.forEach { it.cancel() }
+        avgDisplayJobs.clear()
         state.dialogue = DialogueVisualState(visible = false)
         state.decision = DecisionVisualState(visible = false)
         state.video = VideoVisualState(visible = false)
@@ -535,6 +542,7 @@ class ComposeStoryRenderer(
         state.animTexts.clear()
         state.spellStickers.clear()
         state.stickers.clear()
+        state.avgDisplays.clear()
         state.timerSticker = TimerVisualState(visible = false)
     }
 
@@ -587,7 +595,102 @@ class ComposeStoryRenderer(
         }
     }
 
-    override suspend fun setAvgDisplay(input: AvgDisplayInput) {}
+    override suspend fun setAvgDisplay(input: AvgDisplayInput) {
+        val id = input.id
+        if (input.name.isEmpty()) {
+            avgDisplayJobs[id]?.cancel()
+            avgDisplayJobs.remove(id)
+            state.avgDisplays.remove(id)
+            return
+        }
+
+        avgDisplayJobs[id]?.cancel()
+        val existing = state.avgDisplays[id]
+
+        val startX = input.xFrom ?: input.x ?: existing?.x ?: 0f
+        val startY = input.yFrom ?: input.y ?: existing?.y ?: 0f
+        val endX = input.xTo ?: startX
+        val endY = input.yTo ?: startY
+
+        val startScaleX = input.scaleXFrom ?: input.scaleX ?: existing?.scaleX ?: 1f
+        val startScaleY = input.scaleYFrom ?: input.scaleY ?: existing?.scaleY ?: 1f
+        val endScaleX = input.scaleXTo ?: startScaleX
+        val endScaleY = input.scaleYTo ?: startScaleY
+
+        val supportsPosition = input.style in setOf("effect", "bgeffect", "animekv", "character")
+        val supportsScale = input.style == "animekv"
+        val supportsFade = input.style == "bg"
+
+        val initialAlpha = if (supportsFade) (input.alphaFrom ?: existing?.alpha ?: 1f) else 1f
+        val targetAlpha = if (supportsFade) (input.alphaTo ?: 0f) else 1f
+
+        var item = AvgDisplayVisualItem(
+            id = id,
+            name = input.name,
+            style = input.style,
+            slot = input.slot,
+            layer = input.layer,
+            x = if (supportsPosition) startX else 0f,
+            y = if (supportsPosition) startY else 0f,
+            scaleX = if (supportsScale) startScaleX else 1f,
+            scaleY = if (supportsScale) startScaleY else 1f,
+            rotationZ = if (input.style in setOf("effect", "bgeffect", "character")) input.rotationZ else 0f,
+            alpha = initialAlpha,
+            visible = true
+        )
+        state.avgDisplays[id] = item
+
+        val hasPositionTween = supportsPosition && (startX != endX || startY != endY)
+        val hasScaleTween = supportsScale && (startScaleX != endScaleX || startScaleY != endScaleY)
+        val hasFadeTween = supportsFade && (initialAlpha != targetAlpha)
+
+        val hasTween = input.durationMs > 0 && (hasPositionTween || hasScaleTween || hasFadeTween)
+
+        if (hasTween) {
+            val job = coroutineScope.launch {
+                tween(input.durationMs) { progress ->
+                    val cur = state.avgDisplays[id] ?: return@tween
+                    val curX = if (supportsPosition) startX + (endX - startX) * progress else cur.x
+                    val curY = if (supportsPosition) startY + (endY - startY) * progress else cur.y
+                    val curScaleX = if (supportsScale) startScaleX + (endScaleX - startScaleX) * progress else cur.scaleX
+                    val curScaleY = if (supportsScale) startScaleY + (endScaleY - startScaleY) * progress else cur.scaleY
+                    val curAlpha = if (supportsFade) initialAlpha + (targetAlpha - initialAlpha) * progress else cur.alpha
+
+                    state.avgDisplays[id] = cur.copy(
+                        x = curX,
+                        y = curY,
+                        scaleX = curScaleX,
+                        scaleY = curScaleY,
+                        alpha = curAlpha
+                    )
+                }
+                val cur = state.avgDisplays[id]
+                if (cur != null) {
+                    state.avgDisplays[id] = cur.copy(
+                        x = if (supportsPosition) endX else cur.x,
+                        y = if (supportsPosition) endY else cur.y,
+                        scaleX = if (supportsScale) endScaleX else cur.scaleX,
+                        scaleY = if (supportsScale) endScaleY else cur.scaleY,
+                        alpha = if (supportsFade) targetAlpha else cur.alpha
+                    )
+                }
+            }
+            avgDisplayJobs[id] = job
+            job.invokeOnCompletion { avgDisplayJobs.remove(id) }
+
+            if (input.block) {
+                job.join()
+            }
+        } else {
+            state.avgDisplays[id] = item.copy(
+                x = if (supportsPosition) endX else item.x,
+                y = if (supportsPosition) endY else item.y,
+                scaleX = if (supportsScale) endScaleX else item.scaleX,
+                scaleY = if (supportsScale) endScaleY else item.scaleY,
+                alpha = if (supportsFade) targetAlpha else item.alpha
+            )
+        }
+    }
 
     override suspend fun setBackground(key: String, input: BackgroundInput?) {
         val inp = input ?: BackgroundInput()
@@ -1855,7 +1958,6 @@ class ComposeStoryRenderer(
         )
         state.timerSticker = target
 
-        // 1. Positive stopwatch count up task
         if (capSeconds != null) {
             val startMs = System.currentTimeMillis()
             timerCountJob = coroutineScope.launch {
@@ -1875,7 +1977,6 @@ class ComposeStoryRenderer(
             }
         }
 
-        // 2. Alpha fade-in tween
         val durationMs = if (input.durationMs > 0L) input.durationMs else 130L
         timerFadeJob = coroutineScope.launch {
             tween(durationMs) { progress ->

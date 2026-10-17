@@ -273,7 +273,15 @@ fun StoryPlayerScreen(
                     )
                 }
 
-                // Foreground Images
+                // Layer 0.8: AVG Display Background Overlay (bgover)
+                AvgDisplayOverlay(
+                    slotName = "bgover",
+                    avgDisplays = state.avgDisplays,
+                    context = curContext,
+                    modifier = Modifier.fillMaxSize()
+                )
+
+                // Layer 1: Foreground Images
                 state.foregroundImage?.let { img ->
                     val imgUrl = img.textureKey?.let { resolveStoryAssetByKey(it, StoryAssetFamily.IMAGE) }
                     if (imgUrl != null) {
@@ -293,7 +301,15 @@ fun StoryPlayerScreen(
                     }
                 }
 
-                // Layer 1: Characters Slots
+                // Layer 1.2: AVG Display CG Overlay (cgover)
+                AvgDisplayOverlay(
+                    slotName = "cgover",
+                    avgDisplays = state.avgDisplays,
+                    context = curContext,
+                    modifier = Modifier.fillMaxSize()
+                )
+
+                // Layer 1.5: Characters Slots
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -310,6 +326,14 @@ fun StoryPlayerScreen(
                         )
                     }
                 }
+
+                // Layer 1.8: AVG Display Character Overlay (charover)
+                AvgDisplayOverlay(
+                    slotName = "charover",
+                    avgDisplays = state.avgDisplays,
+                    context = curContext,
+                    modifier = Modifier.fillMaxSize()
+                )
 
                 // Layer 2: Character Cutin 特写剪影层
                 CharacterCutinOverlay(

@@ -245,6 +245,21 @@ data class InterludeChannelVisualState(
     val elements: Map<String, InterludeElementVisualState> = emptyMap()
 )
 
+data class AvgDisplayVisualItem(
+    val id: String,
+    val name: String,
+    val style: String,
+    val slot: String,
+    val layer: Int = 1,
+    val x: Float = 0f,
+    val y: Float = 0f,
+    val scaleX: Float = 1f,
+    val scaleY: Float = 1f,
+    val rotationZ: Float = 0f,
+    val alpha: Float = 1f,
+    val visible: Boolean = true
+)
+
 class StoryRendererState {
     var background by mutableStateOf<BackgroundVisualState?>(null)
     var foregroundImage by mutableStateOf<BackgroundVisualState?>(null)
@@ -258,6 +273,7 @@ class StoryRendererState {
     val cgItems = mutableStateMapOf<String, CgItemVisualSlot>()
     val animTexts = mutableStateListOf<AnimTextVisualItem>()
     val spellStickers = mutableStateMapOf<String, SpellStickerVisualState>()
+    val avgDisplays = mutableStateMapOf<String, AvgDisplayVisualItem>()
     var dialogue by mutableStateOf(DialogueVisualState())
     var subtitle by mutableStateOf(SubtitleVisualState())
     val stickers = mutableStateMapOf<String, StickerVisualState>()
