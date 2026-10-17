@@ -121,7 +121,8 @@ data class DecisionVisualState(
 
 data class VideoVisualState(
     val visible: Boolean = false,
-    val url: String = ""
+    val url: String = "",
+    val onEnded: () -> Unit = {}
 )
 
 data class CameraVisualState(

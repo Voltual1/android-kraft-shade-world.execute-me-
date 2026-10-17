@@ -70,6 +70,7 @@ class ComposeStoryRenderer(
 
     private var activeShakeJob: Job? = null
     private var pendingDecisionDeferred: CompletableDeferred<DecisionSelection>? = null
+    private var activeVideoDeferred: CompletableDeferred<Unit>? = null
     private var isTextTypingComplete = true
     private val cgItemJobs = mutableMapOf<String, MutableList<Job>>()
     private val animTextJobs = mutableListOf<Job>()
@@ -511,6 +512,7 @@ class ComposeStoryRenderer(
     override fun destroy() {
         activeShakeJob?.cancel()
         pendingDecisionDeferred?.cancel()
+        stopVideo()
         cgItemJobs.values.flatten().forEach { it.cancel() }
         cgItemJobs.clear()
         animTextJobs.forEach { it.cancel() }
@@ -555,7 +557,26 @@ class ComposeStoryRenderer(
     }
 
     override suspend fun playVideo(url: String) {
-        state.video = VideoVisualState(visible = true, url = url)
+        val deferred = CompletableDeferred<Unit>()
+        activeVideoDeferred?.cancel()
+        activeVideoDeferred = deferred
+
+        state.video = VideoVisualState(
+            visible = true,
+            url = url,
+            onEnded = {
+                if (deferred.isActive) {
+                    deferred.complete(Unit)
+                }
+            }
+        )
+
+        try {
+            deferred.await()
+        } finally {
+            state.video = VideoVisualState(visible = false, url = "")
+            activeVideoDeferred = null
+        }
     }
 
     override suspend fun setAnimText(input: AnimTextInput) {
@@ -2026,6 +2047,7 @@ class ComposeStoryRenderer(
     }
 
     override fun stopVideo() {
+        activeVideoDeferred?.complete(Unit)
         state.video = VideoVisualState(visible = false, url = "")
     }
 }

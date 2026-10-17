@@ -440,6 +440,12 @@ fun StoryPlayerScreen(
                 modifier = Modifier.fillMaxSize()
             )
 
+            // Layer 11.5: Video Player Overlay (全屏置顶播放)
+            VideoPlayerOverlay(
+                video = state.video,
+                modifier = Modifier.fillMaxSize()
+            )
+
             // Layer 12: Fast-Control Top Overlay
             Row(
                 modifier = Modifier
