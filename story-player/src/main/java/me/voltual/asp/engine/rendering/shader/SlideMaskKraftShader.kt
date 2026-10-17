@@ -1,6 +1,8 @@
 package me.voltual.asp.engine.rendering.shader
 
+import com.cardinalblue.kraftshade.model.GlColor
 import com.cardinalblue.kraftshade.shader.TwoTextureInputKraftShader
+import com.cardinalblue.kraftshade.shader.buffer.Texture
 import com.cardinalblue.kraftshade.shader.util.GlUniformDelegate
 import org.intellij.lang.annotations.Language
 
@@ -8,8 +10,8 @@ import org.intellij.lang.annotations.Language
  * Native port: AVG/[UC]Common/Arts/Materials/slide_mask
  * Shader: Torappu/UI/AVG/SlideMask
  *
- * inputImageTexture: Base color / Background scene
- * inputImageTexture2: slide_mask.png (slide_left mask texture)
+ * uTexture: Base color / Background scene or optional blocker texture
+ * uMaskTexture: slide_mask.png (slide_left mask texture)
  */
 class SlideMaskKraftShader : TwoTextureInputKraftShader(
     samplerUniformName = "uTexture",
@@ -22,6 +24,8 @@ class SlideMaskKraftShader : TwoTextureInputKraftShader(
     var vertical: Float by GlUniformDelegate("uVertical")
     var flipX: Float by GlUniformDelegate("uFlipX")
     var flipY: Float by GlUniformDelegate("uFlipY")
+    var color: GlColor by GlUniformDelegate("uColor", required = false)
+    var useTexture: Boolean by GlUniformDelegate("uUseTexture", required = false)
 
     init {
         alpha = 0f
@@ -31,6 +35,9 @@ class SlideMaskKraftShader : TwoTextureInputKraftShader(
         vertical = 0f
         flipX = 0f
         flipY = 0f
+        color = GlColor.Black
+        useTexture = false
+        setInputTexture(Texture.Empty)
     }
 
     fun setVertical(isVertical: Boolean) {
@@ -41,6 +48,10 @@ class SlideMaskKraftShader : TwoTextureInputKraftShader(
     fun setFlip(flipHorizontal: Boolean, flipVertical: Boolean) {
         flipX = if (flipHorizontal) 1f else 0f
         flipY = if (flipVertical) 1f else 0f
+    }
+
+    fun setColor(r: Float, g: Float, b: Float, a: Float = 1f) {
+        color = GlColor(r.coerceIn(0f, 1f), g.coerceIn(0f, 1f), b.coerceIn(0f, 1f), a.coerceIn(0f, 1f))
     }
 
     override fun loadFragmentShader(): String = SLIDE_MASK_FRAGMENT_SHADER
@@ -61,6 +72,9 @@ varying highp vec2 textureCoordinate2;
 
 uniform sampler2D uTexture;
 uniform sampler2D uMaskTexture;
+
+uniform vec4 uColor;
+uniform int uUseTexture;
 
 uniform float uAlpha;
 uniform float uSlide;
@@ -84,7 +98,11 @@ void main() {
     float maskU = (coord - start) / max(span, 0.0001);
     float maskA = texture2D(uMaskTexture, vec2(clamp(maskU, 0.0, 1.0), other)).a;
     float alphaVal = clamp(maskA + uAlpha, 0.0, 1.0);
-    vec4 base = texture2D(uTexture, textureCoordinate);
-    gl_FragColor = vec4(base.rgb * alphaVal, alphaVal);
+
+    vec4 base = uColor;
+    if (uUseTexture != 0) {
+        base *= texture2D(uTexture, textureCoordinate);
+    }
+    gl_FragColor = vec4(base.rgb * alphaVal, base.a * alphaVal);
 }
 """

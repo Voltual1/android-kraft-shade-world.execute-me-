@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.cardinalblue.kraftshade.compose.KraftShadeEffectView
 import com.cardinalblue.kraftshade.compose.rememberKraftShadeEffectState
+import com.cardinalblue.kraftshade.model.GlColor
 import com.cardinalblue.kraftshade.shader.buffer.LoadedTexture
 import kotlinx.coroutines.launch
 import me.voltual.asp.Context
@@ -112,44 +113,79 @@ fun StoryPlayerScreen(
 
     val state = curRenderer.state
 
-    // Update KraftShade Shader parameters whenever renderer camera, blocker or focus updates
-    LaunchedEffect(state.camera, state.blocker, state.focus) {
+    val isSlideBlocker = state.blocker.visible && (state.blocker.style == "slider" || state.blocker.style == "verticalslider")
+    val hasFocus = state.focus.amount > 0f
+    val hasColor = state.camera.grayscale > 0f || state.camera.colorInverse > 0f
+
+    // Track active effect structure key
+    val effectTopologyKey = remember(isSlideBlocker, hasFocus, hasColor) {
+        "${if (isSlideBlocker) "S" else "_"}${if (hasFocus) "F" else "_"}${if (hasColor) "C" else "_"}"
+    }
+
+    // Rebuild the pipeline step only when topology changes
+    LaunchedEffect(effectTopologyKey) {
+        if (!isSlideBlocker && !hasFocus && !hasColor) {
+            return@LaunchedEffect
+        }
+
         kraftEffectState.setEffect { targetBuffer ->
             pipeline(targetBuffer) {
                 graphSteps(targetBuffer) {
-                    val isSlideBlocker = state.blocker.visible && (state.blocker.style == "slider" || state.blocker.style == "verticalslider")
-                    val hasFocus = state.focus.amount > 0f
-                    val hasColor = state.camera.grayscale > 0f || state.camera.colorInverse > 0f
-
                     if (isSlideBlocker) {
-                        slideMaskShader.alpha = state.blocker.alpha
-                        slideMaskShader.setVertical(state.blocker.style == "verticalslider")
-                        slideMaskShader.setFlip(state.blocker.flipX, state.blocker.flipY)
-                        slideMaskShader.setSecondInputTexture(slideMaskTexture)
-                        step(slideMaskShader, targetBuffer)
+                        step(slideMaskShader, targetBuffer) { shader ->
+                            val currentBlocker = state.blocker
+                            shader.alpha = currentBlocker.alpha
+                            shader.setVertical(currentBlocker.style == "verticalslider")
+                            shader.setFlip(currentBlocker.flipX, currentBlocker.flipY)
+                            shader.color = GlColor(
+                                r = currentBlocker.color.r.coerceIn(0f, 1f),
+                                g = currentBlocker.color.g.coerceIn(0f, 1f),
+                                b = currentBlocker.color.b.coerceIn(0f, 1f),
+                                a = 1f
+                            )
+                            shader.useTexture = false
+                            shader.setSecondInputTexture(slideMaskTexture)
+                        }
                     } else if (hasFocus) {
                         val (passBuffer) = createBufferReferences("focusPass")
-                        focusEffectShader.blurAmount = if (state.focus.blur) state.focus.amount else 0f
-                        focusEffectShader.grayAmount = if (state.focus.colorMode == FocusColorMode.GRAYSCALE) state.focus.amount else 0f
-                        focusEffectShader.inverseAmount = if (state.focus.colorMode == FocusColorMode.COLORINVERSE) state.focus.amount else 0f
-
                         if (hasColor) {
-                            step(focusEffectShader, passBuffer)
-                            colorEffectShader.grayAmount = state.camera.grayscale
-                            colorEffectShader.inverseAmount = state.camera.colorInverse
-                            step(colorEffectShader, targetBuffer)
+                            step(focusEffectShader, passBuffer) { shader ->
+                                val curFocus = state.focus
+                                shader.blurAmount = if (curFocus.blur) curFocus.amount else 0f
+                                shader.grayAmount = if (curFocus.colorMode == FocusColorMode.GRAYSCALE) curFocus.amount else 0f
+                                shader.inverseAmount = if (curFocus.colorMode == FocusColorMode.COLORINVERSE) curFocus.amount else 0f
+                            }
+                            step(colorEffectShader, targetBuffer) { shader ->
+                                val curCam = state.camera
+                                shader.grayAmount = curCam.grayscale
+                                shader.inverseAmount = curCam.colorInverse
+                            }
                         } else {
-                            step(focusEffectShader, targetBuffer)
+                            step(focusEffectShader, targetBuffer) { shader ->
+                                val curFocus = state.focus
+                                shader.blurAmount = if (curFocus.blur) curFocus.amount else 0f
+                                shader.grayAmount = if (curFocus.colorMode == FocusColorMode.GRAYSCALE) curFocus.amount else 0f
+                                shader.inverseAmount = if (curFocus.colorMode == FocusColorMode.COLORINVERSE) curFocus.amount else 0f
+                            }
                         }
                     } else if (hasColor) {
-                        colorEffectShader.grayAmount = state.camera.grayscale
-                        colorEffectShader.inverseAmount = state.camera.colorInverse
-                        step(colorEffectShader, targetBuffer)
+                        step(colorEffectShader, targetBuffer) { shader ->
+                            val curCam = state.camera
+                            shader.grayAmount = curCam.grayscale
+                            shader.inverseAmount = curCam.colorInverse
+                        }
                     }
                 }
             }
         }
         kraftEffectState.requestRender()
+    }
+
+    // Request re-render on animated value changes
+    LaunchedEffect(state.blocker.alpha, state.camera.grayscale, state.camera.colorInverse, state.focus.amount) {
+        if (isSlideBlocker || hasFocus || hasColor) {
+            kraftEffectState.requestRender()
+        }
     }
 
     BoxWithConstraints(

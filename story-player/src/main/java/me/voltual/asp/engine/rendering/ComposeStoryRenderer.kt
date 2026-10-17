@@ -485,13 +485,16 @@ class ComposeStoryRenderer(
     }
 
     override suspend fun setBlocker(input: BlockerInput) {
+        val initialAlpha = if (input.fadeMs > 0) input.from.a else input.to.a
+        val shouldBeVisible = initialAlpha > 0f || input.to.a > 0f
+
         val target = BlockerVisualState(
-            visible = input.to.a > 0f,
+            visible = shouldBeVisible,
             color = input.to,
             style = input.style,
             image = input.image,
             inverse = input.inverse,
-            alpha = if (input.fadeMs > 0) input.from.a else input.to.a,
+            alpha = initialAlpha,
             flipX = input.inverse && input.style == "slider",
             flipY = input.inverse && input.style == "verticalslider"
         )
@@ -502,9 +505,13 @@ class ComposeStoryRenderer(
                     val curAlpha = input.from.a + (input.to.a - input.from.a) * progress
                     state.blocker = target.copy(
                         alpha = curAlpha,
-                        visible = curAlpha > 0f
+                        visible = curAlpha > 0f || input.to.a > 0f
                     )
                 }
+                state.blocker = target.copy(
+                    alpha = input.to.a,
+                    visible = input.to.a > 0f
+                )
             }
             if (input.block) job.join()
         }
