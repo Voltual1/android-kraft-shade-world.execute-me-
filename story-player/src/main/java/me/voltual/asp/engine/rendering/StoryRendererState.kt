@@ -218,6 +218,33 @@ data class TimerVisualState(
     val widthPx: Float = 1280f
 )
 
+data class InterludeElementVisualState(
+    val slot: String,
+    val name: String,
+    val type: Int,
+    val avatarCharacterKey: String? = null,
+    val avatarExpression: String? = null,
+    val visible: Boolean = true,
+    val x: Float = 0f,
+    val y: Float = 0f,
+    val scaleX: Float = 1f,
+    val scaleY: Float = 1f,
+    val alpha: Float = 1f
+)
+
+data class InterludeChannelVisualState(
+    val channel: Int,
+    val visible: Boolean = true,
+    val offsetX: Float = 0f,
+    val offsetY: Float = 0f,
+    val baseSizeX: Float = 0f,
+    val baseSizeY: Float = 0f,
+    val maskWidth: Float = 0f,
+    val maskHeight: Float = 0f,
+    val charName: String = "",
+    val elements: Map<String, InterludeElementVisualState> = emptyMap()
+)
+
 class StoryRendererState {
     var background by mutableStateOf<BackgroundVisualState?>(null)
     var foregroundImage by mutableStateOf<BackgroundVisualState?>(null)
@@ -227,6 +254,7 @@ class StoryRendererState {
     var blocker by mutableStateOf(BlockerVisualState())
     val curtains = mutableStateMapOf<Int, CurtainVisualState>()
     val cutinSlots = mutableStateMapOf<String, CharacterCutinSlotState>()
+    val interludes = mutableStateMapOf<Int, InterludeChannelVisualState>()
     val cgItems = mutableStateMapOf<String, CgItemVisualSlot>()
     val animTexts = mutableStateListOf<AnimTextVisualItem>()
     val spellStickers = mutableStateMapOf<String, SpellStickerVisualState>()

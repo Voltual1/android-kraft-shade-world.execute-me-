@@ -36,9 +36,8 @@ class ComposeStoryRenderer(
     private val cgItemJobs = mutableMapOf<String, MutableList<Job>>()
     private val animTextJobs = mutableListOf<Job>()
     private var animTextSessionCounter = 0
-
-    // Character slot running animation jobs management
     private val charSlotJobs = mutableMapOf<String, MutableList<Job>>()
+    private val interludeJobs = mutableMapOf<Int, MutableList<Job>>()
 
     private fun cancelCharSlotJobs(slot: String) {
         charSlotJobs[slot]?.forEach { it.cancel() }
@@ -47,6 +46,17 @@ class ComposeStoryRenderer(
 
     private fun addCharSlotJob(slot: String, job: Job) {
         val list = charSlotJobs.getOrPut(slot) { mutableListOf() }
+        list.add(job)
+        job.invokeOnCompletion { list.remove(job) }
+    }
+
+    private fun cancelInterludeJobs(channel: Int) {
+        interludeJobs[channel]?.forEach { it.cancel() }
+        interludeJobs[channel]?.clear()
+    }
+
+    private fun addInterludeJob(channel: Int, job: Job) {
+        val list = interludeJobs.getOrPut(channel) { mutableListOf() }
         list.add(job)
         job.invokeOnCompletion { list.remove(job) }
     }
@@ -396,7 +406,11 @@ class ComposeStoryRenderer(
         }
     }
 
-    override suspend fun clearInterludes() {}
+    override suspend fun clearInterludes() {
+        interludeJobs.values.flatten().forEach { it.cancel() }
+        interludeJobs.clear()
+        state.interludes.clear()
+    }
 
     override fun destroy() {
         activeShakeJob?.cancel()
@@ -407,12 +421,15 @@ class ComposeStoryRenderer(
         animTextJobs.clear()
         charSlotJobs.values.flatten().forEach { it.cancel() }
         charSlotJobs.clear()
+        interludeJobs.values.flatten().forEach { it.cancel() }
+        interludeJobs.clear()
         state.dialogue = DialogueVisualState(visible = false)
         state.decision = DecisionVisualState(visible = false)
         state.video = VideoVisualState(visible = false)
         state.characters.clear()
         state.curtains.clear()
         state.cutinSlots.clear()
+        state.interludes.clear()
         state.cgItems.clear()
         state.animTexts.clear()
         state.spellStickers.clear()
@@ -1266,7 +1283,193 @@ class ComposeStoryRenderer(
         if (input.block && input.durationMs > 0 && !input.loop) job.join()
     }
 
-    override suspend fun setInterlude(input: InterludeInput) {}
+    override suspend fun setInterlude(input: InterludeInput) {
+        val channelId = input.channel
+        val jobs = mutableListOf<Job>()
+
+        if (input.clear) {
+            val targetChannels = if (channelId < 0) {
+                state.interludes.keys.toList()
+            } else {
+                listOfNotNull(state.interludes[channelId]?.channel)
+            }
+
+            for (ch in targetChannels) {
+                cancelInterludeJobs(ch)
+                val chState = state.interludes[ch] ?: continue
+                if (input.templateSizeDurationMs > 0) {
+                    val from = input.templateSizeFrom
+                    val to = input.templateSizeTo
+                    val baseW = chState.baseSizeX
+                    val baseH = chState.baseSizeY
+                    val clearJob = coroutineScope.launch {
+                        tween(input.templateSizeDurationMs) { progress ->
+                            val cur = state.interludes[ch] ?: return@tween
+                            val factorX = from.x + (to.x - from.x) * progress
+                            val factorY = from.y + (to.y - from.y) * progress
+                            state.interludes[ch] = cur.copy(
+                                maskWidth = baseW * factorX,
+                                maskHeight = baseH * factorY
+                            )
+                        }
+                        state.interludes.remove(ch)
+                    }
+                    jobs.add(clearJob)
+                    addInterludeJob(ch, clearJob)
+                } else {
+                    state.interludes.remove(ch)
+                }
+            }
+            if (input.block && jobs.isNotEmpty()) {
+                jobs.joinAll()
+            }
+            return
+        }
+
+        if (channelId < 0) {
+            onWarning?.invoke("interlude channel is invalid: $channelId")
+            return
+        }
+
+        cancelInterludeJobs(channelId)
+        val existing = state.interludes[channelId]
+        val baseW = if (input.size.x > 0f) input.size.x else (existing?.baseSizeX ?: 200f)
+        val baseH = if (input.size.y > 0f) input.size.y else (existing?.baseSizeY ?: 200f)
+
+        var channelState = existing?.copy(
+            visible = input.switchOn,
+            offsetX = input.offset.x,
+            offsetY = input.offset.y,
+            baseSizeX = baseW,
+            baseSizeY = baseH,
+            charName = input.charName.ifEmpty { existing.charName }
+        ) ?: InterludeChannelVisualState(
+            channel = channelId,
+            visible = input.switchOn,
+            offsetX = input.offset.x,
+            offsetY = input.offset.y,
+            baseSizeX = baseW,
+            baseSizeY = baseH,
+            maskWidth = baseW,
+            maskHeight = baseH,
+            charName = input.charName
+        )
+
+        // Template size scaling animation
+        if (input.templateSizeDurationMs > 0) {
+            val from = input.templateSizeFrom
+            val to = input.templateSizeTo
+            val maskJob = coroutineScope.launch {
+                tween(input.templateSizeDurationMs) { progress ->
+                    val cur = state.interludes[channelId] ?: return@tween
+                    val factorX = from.x + (to.x - from.x) * progress
+                    val factorY = from.y + (to.y - from.y) * progress
+                    state.interludes[channelId] = cur.copy(
+                        maskWidth = baseW * factorX,
+                        maskHeight = baseH * factorY
+                    )
+                }
+            }
+            jobs.add(maskJob)
+            addInterludeJob(channelId, maskJob)
+        } else {
+            channelState = channelState.copy(maskWidth = baseW, maskHeight = baseH)
+        }
+
+        // Element track
+        if (input.type != 0) {
+            val slot = input.slot.ifEmpty { "m" }
+            val existingElem = channelState.elements[slot]
+            val initX = input.positionFrom?.x ?: existingElem?.x ?: 0f
+            val initY = input.positionFrom?.let { -it.y } ?: existingElem?.y ?: 0f
+            val initScaleX = input.scaleFrom?.x ?: existingElem?.scaleX ?: 1f
+            val initScaleY = input.scaleFrom?.y ?: existingElem?.scaleY ?: 1f
+            val initAlpha = if (input.alphaFrom >= 0f) input.alphaFrom else (existingElem?.alpha ?: 1f)
+
+            var elem = existingElem?.copy(
+                name = input.name.ifEmpty { existingElem.name },
+                type = input.type,
+                avatarCharacterKey = input.avatarCharacterKey ?: existingElem.avatarCharacterKey,
+                avatarExpression = input.avatarExpression ?: existingElem.avatarExpression,
+                visible = input.switchOn,
+                x = initX,
+                y = initY,
+                scaleX = initScaleX,
+                scaleY = initScaleY,
+                alpha = initAlpha
+            ) ?: InterludeElementVisualState(
+                slot = slot,
+                name = input.name,
+                type = input.type,
+                avatarCharacterKey = input.avatarCharacterKey,
+                avatarExpression = input.avatarExpression,
+                visible = input.switchOn,
+                x = initX,
+                y = initY,
+                scaleX = initScaleX,
+                scaleY = initScaleY,
+                alpha = initAlpha
+            )
+
+            val elemMap = channelState.elements.toMutableMap()
+            elemMap[slot] = elem
+            channelState = channelState.copy(elements = elemMap)
+            state.interludes[channelId] = channelState
+
+            val duration = maxOf(input.durationMs, input.scaleDurationMs, input.alphaDurationMs)
+            if (duration > 0) {
+                val fromPos = input.positionFrom
+                val toPos = input.positionTo
+                val fromScale = input.scaleFrom
+                val toScale = input.scaleTo
+                val startAlpha = if (input.alphaFrom >= 0f) input.alphaFrom else elem.alpha
+                val endAlpha = if (input.alphaTo >= 0f) input.alphaTo else 1f
+
+                val elemJob = coroutineScope.launch {
+                    tween(duration) { progress ->
+                        val curChannel = state.interludes[channelId] ?: return@tween
+                        val curElem = curChannel.elements[slot] ?: return@tween
+
+                        val curX = if (fromPos != null && toPos != null) {
+                            fromPos.x + (toPos.x - fromPos.x) * progress
+                        } else curElem.x
+
+                        val curY = if (fromPos != null && toPos != null) {
+                            -(fromPos.y + (toPos.y - fromPos.y) * progress)
+                        } else curElem.y
+
+                        val curScaleX = if (fromScale != null && toScale != null) {
+                            fromScale.x + (toScale.x - fromScale.x) * progress
+                        } else curElem.scaleX
+
+                        val curScaleY = if (fromScale != null && toScale != null) {
+                            fromScale.y + (toScale.y - fromScale.y) * progress
+                        } else curElem.scaleY
+
+                        val curAlpha = startAlpha + (endAlpha - startAlpha) * progress
+
+                        val updatedElements = curChannel.elements.toMutableMap()
+                        updatedElements[slot] = curElem.copy(
+                            x = curX,
+                            y = curY,
+                            scaleX = curScaleX,
+                            scaleY = curScaleY,
+                            alpha = curAlpha
+                        )
+                        state.interludes[channelId] = curChannel.copy(elements = updatedElements)
+                    }
+                }
+                jobs.add(elemJob)
+                addInterludeJob(channelId, elemJob)
+            }
+        } else {
+            state.interludes[channelId] = channelState
+        }
+
+        if (input.block && jobs.isNotEmpty()) {
+            jobs.joinAll()
+        }
+    }
 
     override suspend fun setLargeBackgroundTween(input: LargeBackgroundTweenInput) {
         val current = state.gridBackground ?: return

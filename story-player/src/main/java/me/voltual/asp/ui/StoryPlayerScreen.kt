@@ -279,6 +279,13 @@ fun StoryPlayerScreen(
                 modifier = Modifier.fillMaxSize()
             )
 
+            // Layer 2.5: Interlude 过场遮罩层
+            InterludeOverlay(
+                interludes = state.interludes,
+                context = curContext,
+                modifier = Modifier.fillMaxSize()
+            )
+
             // Layer 3: CG Item 独立物件动画层 (不随相机晃动)
             CgItemOverlay(
                 cgItems = state.cgItems,
