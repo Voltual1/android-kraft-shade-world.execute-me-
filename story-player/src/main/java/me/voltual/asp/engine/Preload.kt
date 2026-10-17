@@ -188,7 +188,7 @@ private fun addCharacterUrls(
 
     fun addFaceGroup(
         link: StoryLinkNode,
-        groupIndex: numberGroupIndex@ Int,
+        groupIndex: Int,
         baseUrl: String,
         usedExpression: String? = null
     ) {
