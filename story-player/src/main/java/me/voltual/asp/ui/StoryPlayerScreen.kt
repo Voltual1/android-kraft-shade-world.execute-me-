@@ -343,7 +343,7 @@ fun StoryPlayerScreen(
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Layer 9: Subtitles & Stickers
+            // Layer 9: Subtitles
             if (state.subtitle.visible && state.subtitle.text.isNotEmpty()) {
                 Text(
                     text = state.subtitle.text,
@@ -354,6 +354,12 @@ fun StoryPlayerScreen(
                         .width(state.subtitle.widthPx.dp)
                 )
             }
+
+            // Layer 9.5: Stickers (贴纸及 stickertween 复合动效)
+            StickerOverlay(
+                stickers = state.stickers,
+                modifier = Modifier.fillMaxSize()
+            )
 
             // Layer 10: Dialogue Box
             DialogueBox(

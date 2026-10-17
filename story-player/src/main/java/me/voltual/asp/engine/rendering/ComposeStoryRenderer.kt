@@ -23,6 +23,37 @@ private data class SlotZoomRange(
     val toShiftY: Float
 )
 
+private sealed interface StickerTweenStep {
+    val durationMs: Long
+    val join: Boolean
+
+    data class Position(
+        override val durationMs: Long,
+        override val join: Boolean,
+        val from: Vec2,
+        val to: Vec2
+    ) : StickerTweenStep
+
+    data class Alpha(
+        override val durationMs: Long,
+        override val join: Boolean,
+        val from: Float,
+        val to: Float
+    ) : StickerTweenStep
+
+    data class Rotation(
+        override val durationMs: Long,
+        override val join: Boolean,
+        val from: Float,
+        val to: Float
+    ) : StickerTweenStep
+}
+
+private data class TimedStickerStep(
+    val startMs: Long,
+    val step: StickerTweenStep
+)
+
 class ComposeStoryRenderer(
     private val context: Context,
     val state: StoryRendererState = StoryRendererState(),
@@ -38,6 +69,11 @@ class ComposeStoryRenderer(
     private var animTextSessionCounter = 0
     private val charSlotJobs = mutableMapOf<String, MutableList<Job>>()
     private val interludeJobs = mutableMapOf<Int, MutableList<Job>>()
+
+    // Sticker tween queue & session management
+    private val stickerTweenQueues = mutableMapOf<String, MutableList<StickerTweenStep>>()
+    private val stickerTweenSessionIds = mutableMapOf<String, Int>()
+    private val stickerJobs = mutableMapOf<String, MutableList<Job>>()
 
     private fun cancelCharSlotJobs(slot: String) {
         charSlotJobs[slot]?.forEach { it.cancel() }
@@ -57,6 +93,17 @@ class ComposeStoryRenderer(
 
     private fun addInterludeJob(channel: Int, job: Job) {
         val list = interludeJobs.getOrPut(channel) { mutableListOf() }
+        list.add(job)
+        job.invokeOnCompletion { list.remove(job) }
+    }
+
+    private fun cancelStickerJobs(id: String) {
+        stickerJobs[id]?.forEach { it.cancel() }
+        stickerJobs[id]?.clear()
+    }
+
+    private fun addStickerJob(id: String, job: Job) {
+        val list = stickerJobs.getOrPut(id) { mutableListOf() }
         list.add(job)
         job.invokeOnCompletion { list.remove(job) }
     }
@@ -305,24 +352,29 @@ class ComposeStoryRenderer(
 
     override suspend fun clearSticker(id: String?, fadeMs: Long) {
         if (id != null) {
+            cancelStickerJobs(id)
+            stickerTweenQueues.remove(id)
             val current = state.stickers[id] ?: return
             if (fadeMs <= 0) {
                 state.stickers.remove(id)
                 return
             }
-            coroutineScope.launch {
+            val job = coroutineScope.launch {
                 val startAlpha = current.alpha
                 tween(fadeMs) { progress ->
                     state.stickers[id] = current.copy(alpha = startAlpha * (1f - progress))
                 }
                 state.stickers.remove(id)
             }
+            addStickerJob(id, job)
         } else {
             clearStickers(fadeMs)
         }
     }
 
     override suspend fun clearStickers(fadeMs: Long) {
+        stickerJobs.keys.toList().forEach { cancelStickerJobs(it) }
+        stickerTweenQueues.clear()
         if (fadeMs <= 0) {
             state.stickers.clear()
             return
@@ -423,6 +475,9 @@ class ComposeStoryRenderer(
         charSlotJobs.clear()
         interludeJobs.values.flatten().forEach { it.cancel() }
         interludeJobs.clear()
+        stickerJobs.values.flatten().forEach { it.cancel() }
+        stickerJobs.clear()
+        stickerTweenQueues.clear()
         state.dialogue = DialogueVisualState(visible = false)
         state.decision = DecisionVisualState(visible = false)
         state.video = VideoVisualState(visible = false)
@@ -1647,7 +1702,94 @@ class ComposeStoryRenderer(
         input.onTypingComplete?.invoke()
     }
 
-    override suspend fun stickerTween(input: StickerTweenInput) {}
+    override suspend fun stickerTween(input: StickerTweenInput) {
+        val id = input.id
+        val queue = stickerTweenQueues.getOrPut(id) { mutableListOf() }
+        if (input.position != null) {
+            queue.add(StickerTweenStep.Position(input.position.durationMs, input.join, input.position.from, input.position.to))
+        }
+        if (input.rotation != null) {
+            queue.add(StickerTweenStep.Rotation(input.rotation.durationMs, input.join, input.rotation.from, input.rotation.to))
+        }
+        if (input.alpha != null) {
+            queue.add(StickerTweenStep.Alpha(input.alpha.durationMs, input.join, input.alpha.from, input.alpha.to))
+        }
+
+        if (!input.isend) return
+
+        stickerTweenQueues.remove(id)
+        val sticker = state.stickers[id] ?: return
+        if (queue.isEmpty()) return
+
+        cancelStickerJobs(id)
+        val sessionId = (stickerTweenSessionIds[id] ?: 0) + 1
+        stickerTweenSessionIds[id] = sessionId
+
+        val windows = mutableListOf<TimedStickerStep>()
+        var segmentStart = 0L
+        var segmentLongest = 0L
+        var open = false
+
+        for (step in queue) {
+            if (!open || !step.join) {
+                segmentStart += segmentLongest
+                segmentLongest = 0L
+                open = true
+            }
+            windows.add(TimedStickerStep(startMs = segmentStart, step = step))
+            segmentLongest = max(segmentLongest, step.durationMs)
+        }
+        val totalMs = segmentStart + segmentLongest
+
+        fun applyStep(step: StickerTweenStep, progress: Float) {
+            val cur = state.stickers[id] ?: return
+            when (step) {
+                is StickerTweenStep.Position -> {
+                    state.stickers[id] = cur.copy(
+                        x = step.from.x + (step.to.x - step.from.x) * progress,
+                        y = step.from.y + (step.to.y - step.from.y) * progress
+                    )
+                }
+                is StickerTweenStep.Alpha -> {
+                    state.stickers[id] = cur.copy(
+                        alpha = step.from + (step.to - step.from) * progress
+                    )
+                }
+                is StickerTweenStep.Rotation -> {
+                    state.stickers[id] = cur.copy(
+                        rotationDeg = step.from + (step.to - step.from) * progress
+                    )
+                }
+            }
+        }
+
+        // Snap initial state for all steps at t=0
+        for (w in windows) {
+            applyStep(w.step, 0f)
+        }
+
+        val tweenJob = coroutineScope.launch {
+            val startTime = System.currentTimeMillis()
+            while (true) {
+                if (stickerTweenSessionIds[id] != sessionId) return@launch
+                val elapsed = System.currentTimeMillis() - startTime
+                for (w in windows) {
+                    val local = if (w.step.durationMs <= 0L) 1f else {
+                        ((elapsed - w.startMs).toFloat() / w.step.durationMs).coerceIn(0f, 1f)
+                    }
+                    applyStep(w.step, local)
+                }
+                if (elapsed >= totalMs) break
+                delay(16)
+            }
+            if (stickerTweenSessionIds[id] == sessionId) {
+                for (w in windows) {
+                    applyStep(w.step, 1f)
+                }
+            }
+        }
+        addStickerJob(id, tweenJob)
+    }
 
     override suspend fun setSubtitle(input: SubtitleInput) {
         state.subtitle = SubtitleVisualState(
