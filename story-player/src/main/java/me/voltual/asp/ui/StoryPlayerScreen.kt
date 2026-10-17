@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -54,6 +55,9 @@ fun StoryPlayerScreen(
     var audio by remember { mutableStateOf<AndroidStoryAudio?>(null) }
 
     var isPreloading by remember { mutableStateOf(true) }
+    var preloadProgress by remember { mutableStateOf(0f) }
+    var preloadError by remember { mutableStateOf<String?>(null) }
+
     var activeLineIndex by remember { mutableStateOf<Int?>(null) }
     var showLogAll by remember { mutableStateOf(false) }
 
@@ -66,27 +70,45 @@ fun StoryPlayerScreen(
         LoadedTexture(bmp, name = "slide_mask")
     }
 
-    // Initialize context and story engines
+    // Initialize context, preload media assets, and start story engine
     LaunchedEffect(scriptText) {
         isPreloading = true
-        val ctx = loadContextByScript(scriptText)
-        storyContext = ctx
+        preloadProgress = 0f
+        preloadError = null
 
-        val sndAudio = AndroidStoryAudio(androidContext)
-        audio = sndAudio
+        try {
+            val ctx = loadContextByScript(scriptText)
+            storyContext = ctx
 
-        val rdr = ComposeStoryRenderer(ctx, coroutineScope = coroutineScope)
-        renderer = rdr
+            val sndAudio = AndroidStoryAudio(androidContext)
+            audio = sndAudio
 
-        val rt = StoryRuntime(ctx, rdr, sndAudio)
-        runtime = rt
+            val rdr = ComposeStoryRenderer(ctx, coroutineScope = coroutineScope)
+            renderer = rdr
 
-        rt.onDisplayedLineChange { line ->
-            activeLineIndex = line
+            val rt = StoryRuntime(ctx, rdr, sndAudio)
+            runtime = rt
+
+            rt.onDisplayedLineChange { line ->
+                activeLineIndex = line
+            }
+
+            // Execute full asset scan and pre-cache resources (images to Coil3, audio via Ktor)
+            preloadContextAssets(
+                context = ctx,
+                androidContext = androidContext,
+                maxConcurrency = 8,
+                onProgress = { progress ->
+                    preloadProgress = progress
+                }
+            )
+
+            isPreloading = false
+            rt.start()
+        } catch (e: Throwable) {
+            preloadError = e.message ?: "资源加载失败"
+            isPreloading = false
         }
-
-        isPreloading = false
-        rt.start()
     }
 
     DisposableEffect(Unit) {
@@ -103,10 +125,48 @@ fun StoryPlayerScreen(
 
     if (isPreloading || curRenderer == null || curRuntime == null || curContext == null) {
         Box(
-            modifier = modifier.fillMaxSize().background(Color.Black),
+            modifier = modifier
+                .fillMaxSize()
+                .background(Color.Black),
             contentAlignment = Alignment.Center
         ) {
-            CircularProgressIndicator(color = Color.White)
+            if (preloadError != null) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(24.dp)
+                ) {
+                    Text(
+                        text = "资源加载失败",
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = preloadError ?: "",
+                        color = Color.LightGray,
+                        fontSize = 14.sp
+                    )
+                }
+            } else {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    CircularProgressIndicator(
+                        progress = { preloadProgress.coerceIn(0f, 1f) },
+                        color = Color.White,
+                        trackColor = Color.DarkGray
+                    )
+                    val percent = (preloadProgress.coerceIn(0f, 1f) * 100f).roundToInt()
+                    Text(
+                        text = "正在预加载资源 $percent%",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
         }
         return
     }
