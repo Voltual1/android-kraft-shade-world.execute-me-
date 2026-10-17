@@ -239,6 +239,12 @@ fun StoryPlayerScreen(
                 }
             }
 
+            // Layer 0.5: Large / Grid Background (gridbg, verticalbg, largebg, largeimg)
+            GridBackgroundOverlay(
+                gridBg = state.gridBackground,
+                modifier = Modifier.fillMaxSize()
+            )
+
             // Foreground Images
             state.foregroundImage?.let { img ->
                 val imgUrl = img.textureKey?.let { resolveStoryAssetByKey(it, StoryAssetFamily.IMAGE) }
