@@ -90,4 +90,7 @@ dependencies {
   implementation(libs.ktor.client.content.negotiation)
   implementation(libs.ktor.serialization.json)
   implementation(libs.ktor.client.logging)
+  
+  implementation(libs.coil.network.ktor)
+  implementation(libs.coil.network.cache.control)  
 }
