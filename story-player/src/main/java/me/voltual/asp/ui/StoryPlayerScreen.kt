@@ -10,9 +10,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
@@ -30,8 +33,7 @@ import me.voltual.asp.engine.*
 import me.voltual.asp.engine.audio.AndroidStoryAudio
 import me.voltual.asp.engine.log.buildLogAll
 import me.voltual.asp.engine.rendering.ComposeStoryRenderer
-import me.voltual.asp.engine.rendering.shader.ColorEffectKraftShader
-import me.voltual.asp.engine.rendering.shader.FocusEffectKraftShader
+import me.voltual.asp.engine.rendering.buildColorEffectColorMatrix
 import me.voltual.asp.engine.rendering.shader.SlideMaskKraftShader
 import me.voltual.asp.loadContextByScript
 import me.voltual.asp.ui.components.*
@@ -57,8 +59,6 @@ fun StoryPlayerScreen(
 
     val kraftEffectState = rememberKraftShadeEffectState()
     val slideMaskShader = remember { SlideMaskKraftShader() }
-    val colorEffectShader = remember { ColorEffectKraftShader() }
-    val focusEffectShader = remember { FocusEffectKraftShader() }
 
     // Cached slide_mask bitmap texture
     val slideMaskTexture = remember {
@@ -114,66 +114,27 @@ fun StoryPlayerScreen(
     val state = curRenderer.state
 
     val isSlideBlocker = state.blocker.visible && (state.blocker.style == "slider" || state.blocker.style == "verticalslider")
-    val hasFocus = state.focus.amount > 0f
-    val hasColor = state.camera.grayscale > 0f || state.camera.colorInverse > 0f
 
-    // Track active effect structure key
-    val effectTopologyKey = remember(isSlideBlocker, hasFocus, hasColor) {
-        "${if (isSlideBlocker) "S" else "_"}${if (hasFocus) "F" else "_"}${if (hasColor) "C" else "_"}"
-    }
-
-    // Rebuild the pipeline step only when topology changes
-    LaunchedEffect(effectTopologyKey) {
-        if (!isSlideBlocker && !hasFocus && !hasColor) {
-            return@LaunchedEffect
-        }
+    // Update KraftShade Shader only for blocker slider/verticalslider wipe
+    LaunchedEffect(isSlideBlocker) {
+        if (!isSlideBlocker) return@LaunchedEffect
 
         kraftEffectState.setEffect { targetBuffer ->
             pipeline(targetBuffer) {
                 graphSteps(targetBuffer) {
-                    if (isSlideBlocker) {
-                        step(slideMaskShader, targetBuffer) { shader ->
-                            val currentBlocker = state.blocker
-                            shader.alpha = currentBlocker.alpha
-                            shader.setVertical(currentBlocker.style == "verticalslider")
-                            shader.setFlip(currentBlocker.flipX, currentBlocker.flipY)
-                            shader.color = GlColor(
-                                r = currentBlocker.color.r.coerceIn(0f, 1f),
-                                g = currentBlocker.color.g.coerceIn(0f, 1f),
-                                b = currentBlocker.color.b.coerceIn(0f, 1f),
-                                a = 1f
-                            )
-                            shader.useTexture = false
-                            shader.setSecondInputTexture(slideMaskTexture)
-                        }
-                    } else if (hasFocus) {
-                        val (passBuffer) = createBufferReferences("focusPass")
-                        if (hasColor) {
-                            step(focusEffectShader, passBuffer) { shader ->
-                                val curFocus = state.focus
-                                shader.blurAmount = if (curFocus.blur) curFocus.amount else 0f
-                                shader.grayAmount = if (curFocus.colorMode == FocusColorMode.GRAYSCALE) curFocus.amount else 0f
-                                shader.inverseAmount = if (curFocus.colorMode == FocusColorMode.COLORINVERSE) curFocus.amount else 0f
-                            }
-                            step(colorEffectShader, targetBuffer) { shader ->
-                                val curCam = state.camera
-                                shader.grayAmount = curCam.grayscale
-                                shader.inverseAmount = curCam.colorInverse
-                            }
-                        } else {
-                            step(focusEffectShader, targetBuffer) { shader ->
-                                val curFocus = state.focus
-                                shader.blurAmount = if (curFocus.blur) curFocus.amount else 0f
-                                shader.grayAmount = if (curFocus.colorMode == FocusColorMode.GRAYSCALE) curFocus.amount else 0f
-                                shader.inverseAmount = if (curFocus.colorMode == FocusColorMode.COLORINVERSE) curFocus.amount else 0f
-                            }
-                        }
-                    } else if (hasColor) {
-                        step(colorEffectShader, targetBuffer) { shader ->
-                            val curCam = state.camera
-                            shader.grayAmount = curCam.grayscale
-                            shader.inverseAmount = curCam.colorInverse
-                        }
+                    step(slideMaskShader, targetBuffer) { shader ->
+                        val currentBlocker = state.blocker
+                        shader.alpha = currentBlocker.alpha
+                        shader.setVertical(currentBlocker.style == "verticalslider")
+                        shader.setFlip(currentBlocker.flipX, currentBlocker.flipY)
+                        shader.color = GlColor(
+                            r = currentBlocker.color.r.coerceIn(0f, 1f),
+                            g = currentBlocker.color.g.coerceIn(0f, 1f),
+                            b = currentBlocker.color.b.coerceIn(0f, 1f),
+                            a = 1f
+                        )
+                        shader.useTexture = false
+                        shader.setSecondInputTexture(slideMaskTexture)
                     }
                 }
             }
@@ -181,11 +142,57 @@ fun StoryPlayerScreen(
         kraftEffectState.requestRender()
     }
 
-    // Request re-render on animated value changes
-    LaunchedEffect(state.blocker.alpha, state.camera.grayscale, state.camera.colorInverse, state.focus.amount) {
-        if (isSlideBlocker || hasFocus || hasColor) {
+    LaunchedEffect(state.blocker.alpha) {
+        if (isSlideBlocker) {
             kraftEffectState.requestRender()
         }
+    }
+
+    // Build scene-level color effect filter
+    val sceneColorFilter = remember(state.camera.grayscale, state.camera.colorInverse) {
+        if (state.camera.grayscale > 0f || state.camera.colorInverse > 0f) {
+            ColorFilter.colorMatrix(
+                buildColorEffectColorMatrix(
+                    gray = state.camera.grayscale.coerceIn(0f, 1f),
+                    inverse = state.camera.colorInverse.coerceIn(0f, 1f)
+                )
+            )
+        } else null
+    }
+
+    // Focus parameters per layer
+    val bgFocusAmount = state.focus.getAmount("bg")
+    val lbgFocusAmount = state.focus.getAmount("lbg")
+    val charFocusAmount = state.focus.getAmount("char")
+    val cgFocusAmount = state.focus.getAmount("cg")
+
+    val bgBlurRadius = if (state.focus.blur) maxOf(bgFocusAmount, lbgFocusAmount) * 16f else 0f
+    val charBlurRadius = if (state.focus.blur) charFocusAmount * 16f else 0f
+    val cgBlurRadius = if (state.focus.blur) cgFocusAmount * 16f else 0f
+
+    val bgFocusColorFilter = remember(state.focus.colorMode, bgFocusAmount, lbgFocusAmount) {
+        val amt = maxOf(bgFocusAmount, lbgFocusAmount)
+        if (amt > 0f && state.focus.colorMode != FocusColorMode.NONE) {
+            val gray = if (state.focus.colorMode == FocusColorMode.GRAYSCALE) amt else 0f
+            val inv = if (state.focus.colorMode == FocusColorMode.COLORINVERSE) amt else 0f
+            ColorFilter.colorMatrix(buildColorEffectColorMatrix(gray, inv))
+        } else null
+    }
+
+    val charFocusColorFilter = remember(state.focus.colorMode, charFocusAmount) {
+        if (charFocusAmount > 0f && state.focus.colorMode != FocusColorMode.NONE) {
+            val gray = if (state.focus.colorMode == FocusColorMode.GRAYSCALE) charFocusAmount else 0f
+            val inv = if (state.focus.colorMode == FocusColorMode.COLORINVERSE) charFocusAmount else 0f
+            ColorFilter.colorMatrix(buildColorEffectColorMatrix(gray, inv))
+        } else null
+    }
+
+    val cgFocusColorFilter = remember(state.focus.colorMode, cgFocusAmount) {
+        if (cgFocusAmount > 0f && state.focus.colorMode != FocusColorMode.NONE) {
+            val gray = if (state.focus.colorMode == FocusColorMode.GRAYSCALE) cgFocusAmount else 0f
+            val inv = if (state.focus.colorMode == FocusColorMode.COLORINVERSE) cgFocusAmount else 0f
+            ColorFilter.colorMatrix(buildColorEffectColorMatrix(gray, inv))
+        } else null
     }
 
     BoxWithConstraints(
@@ -222,71 +229,104 @@ fun StoryPlayerScreen(
                     )
                 }
         ) {
-            // Layer 0: Background Texture
-            state.background?.let { bg ->
-                val bgUrl = bg.textureKey?.let { resolveStoryAssetByKey(it, StoryAssetFamily.BACKGROUND) }
-                if (bgUrl != null) {
-                    AsyncImage(
-                        model = bgUrl,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .alpha(bg.alpha)
-                            .scale(bg.scaleX, bg.scaleY)
-                            .offset(bg.x.dp, bg.y.dp)
+            // Scene Layer Container (Subject to Camera Effects)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        sceneColorFilter?.let { filter ->
+                            colorFilter = filter
+                        }
+                    }
+            ) {
+                // Layer 0: Background Texture
+                state.background?.let { bg ->
+                    val bgUrl = bg.textureKey?.let { resolveStoryAssetByKey(it, StoryAssetFamily.BACKGROUND) }
+                    if (bgUrl != null) {
+                        AsyncImage(
+                            model = bgUrl,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            colorFilter = bgFocusColorFilter,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .alpha(bg.alpha)
+                                .scale(bg.scaleX, bg.scaleY)
+                                .offset(bg.x.dp, bg.y.dp)
+                                .then(if (bgBlurRadius > 0f) Modifier.blur(bgBlurRadius.dp) else Modifier)
+                        )
+                    }
+                }
+
+                // Layer 0.5: Large / Grid Background
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .then(if (bgBlurRadius > 0f) Modifier.blur(bgBlurRadius.dp) else Modifier)
+                        .graphicsLayer {
+                            bgFocusColorFilter?.let { colorFilter = it }
+                        }
+                ) {
+                    GridBackgroundOverlay(
+                        gridBg = state.gridBackground,
+                        modifier = Modifier.fillMaxSize()
                     )
                 }
-            }
 
-            // Layer 0.5: Large / Grid Background (gridbg, verticalbg, largebg, largeimg)
-            GridBackgroundOverlay(
-                gridBg = state.gridBackground,
-                modifier = Modifier.fillMaxSize()
-            )
-
-            // Foreground Images
-            state.foregroundImage?.let { img ->
-                val imgUrl = img.textureKey?.let { resolveStoryAssetByKey(it, StoryAssetFamily.IMAGE) }
-                if (imgUrl != null) {
-                    AsyncImage(
-                        model = imgUrl,
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .alpha(img.alpha)
-                            .rotate(curRenderer.state.imageRotationDeg)
-                            .scale(img.scaleX, img.scaleY)
-                            .offset(img.x.dp, img.y.dp)
-                    )
+                // Foreground Images
+                state.foregroundImage?.let { img ->
+                    val imgUrl = img.textureKey?.let { resolveStoryAssetByKey(it, StoryAssetFamily.IMAGE) }
+                    if (imgUrl != null) {
+                        AsyncImage(
+                            model = imgUrl,
+                            contentDescription = null,
+                            contentScale = ContentScale.Fit,
+                            colorFilter = cgFocusColorFilter,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .alpha(img.alpha)
+                                .rotate(curRenderer.state.imageRotationDeg)
+                                .scale(img.scaleX, img.scaleY)
+                                .offset(img.x.dp, img.y.dp)
+                                .then(if (cgBlurRadius > 0f) Modifier.blur(cgBlurRadius.dp) else Modifier)
+                        )
+                    }
                 }
-            }
 
-            // Layer 1: Characters Slots (Left, Middle, Right) - Baked Face Overlay & Precise Anchoring
-            state.characters.values.forEach { charSlot ->
-                CharacterSlotVisualView(
-                    charSlot = charSlot,
+                // Layer 1: Characters Slots
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .then(if (charBlurRadius > 0f) Modifier.blur(charBlurRadius.dp) else Modifier)
+                        .graphicsLayer {
+                            charFocusColorFilter?.let { colorFilter = it }
+                        }
+                ) {
+                    state.characters.values.forEach { charSlot ->
+                        CharacterSlotVisualView(
+                            charSlot = charSlot,
+                            context = curContext,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+
+                // Layer 2: Character Cutin 特写剪影层
+                CharacterCutinOverlay(
+                    cutinSlots = state.cutinSlots,
+                    context = curContext,
+                    modifier = Modifier.fillMaxSize()
+                )
+
+                // Layer 2.5: Interlude 过场遮罩层
+                InterludeOverlay(
+                    interludes = state.interludes,
                     context = curContext,
                     modifier = Modifier.fillMaxSize()
                 )
             }
 
-            // Layer 2: Character Cutin 特写剪影层
-            CharacterCutinOverlay(
-                cutinSlots = state.cutinSlots,
-                context = curContext,
-                modifier = Modifier.fillMaxSize()
-            )
-
-            // Layer 2.5: Interlude 过场遮罩层
-            InterludeOverlay(
-                interludes = state.interludes,
-                context = curContext,
-                modifier = Modifier.fillMaxSize()
-            )
-
-            // Layer 3: CG Item 独立物件动画层 (不随相机晃动)
+            // Layer 3: CG Item 独立物件动画层 (不随相机后处理及晃动)
             CgItemOverlay(
                 cgItems = state.cgItems,
                 modifier = Modifier.fillMaxSize()
@@ -310,11 +350,8 @@ fun StoryPlayerScreen(
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Layer 7: KraftShade Effect View (Camera & Blocker wipe filters & Focus)
-            val isKraftActive = (state.blocker.visible && (state.blocker.style == "slider" || state.blocker.style == "verticalslider")) ||
-                    state.camera.grayscale > 0f || state.camera.colorInverse > 0f || state.focus.amount > 0f
-
-            if (isKraftActive) {
+            // Layer 7: KraftShade Blocker Slider Wipe Effect View
+            if (isSlideBlocker) {
                 KraftShadeEffectView(
                     modifier = Modifier.fillMaxSize(),
                     state = kraftEffectState

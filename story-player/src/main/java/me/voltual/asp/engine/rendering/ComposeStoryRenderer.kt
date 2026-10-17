@@ -69,8 +69,9 @@ class ComposeStoryRenderer(
     private var animTextSessionCounter = 0
     private val charSlotJobs = mutableMapOf<String, MutableList<Job>>()
     private val interludeJobs = mutableMapOf<Int, MutableList<Job>>()
+    private val focusJobs = mutableMapOf<String, Job>()
+    private val internalFocusStates = mutableMapOf<String, Float>()
 
-    // Sticker tween queue & session management
     private val stickerTweenQueues = mutableMapOf<String, MutableList<StickerTweenStep>>()
     private val stickerTweenSessionIds = mutableMapOf<String, Int>()
     private val stickerJobs = mutableMapOf<String, MutableList<Job>>()
@@ -206,22 +207,24 @@ class ComposeStoryRenderer(
     }
 
     override suspend fun setFocusOut(input: FocusOutInput) {
-        val fromAmount = input.from ?: state.focus.amount
+        val key = "${input.type}\u0000${input.id}"
+        val fromAmount = input.from ?: (internalFocusStates[key] ?: 0f)
         val toAmount = input.to
         val durationMs = input.durationMs
 
-        state.focus = state.focus.copy(
-            amount = fromAmount,
-            targetType = input.type,
-            targetId = input.id
-        )
+        internalFocusStates[key] = fromAmount
+        updateAggregatedFocusState()
 
+        focusJobs[key]?.cancel()
         val job = coroutineScope.launch {
             tween(durationMs) { progress ->
-                state.focus = state.focus.copy(amount = fromAmount + (toAmount - fromAmount) * progress)
+                internalFocusStates[key] = fromAmount + (toAmount - fromAmount) * progress
+                updateAggregatedFocusState()
             }
-            state.focus = state.focus.copy(amount = toAmount)
+            internalFocusStates[key] = toAmount
+            updateAggregatedFocusState()
         }
+        focusJobs[key] = job
         if (input.block && durationMs > 0) job.join()
     }
 
@@ -230,6 +233,16 @@ class ComposeStoryRenderer(
             blur = input.blur,
             colorMode = input.color
         )
+    }
+
+    private fun updateAggregatedFocusState() {
+        val amounts = mutableMapOf<String, Float>()
+        for ((key, amount) in internalFocusStates) {
+            val type = key.substringBefore('\u0000')
+            val curMax = amounts[type] ?: 0f
+            amounts[type] = maxOf(curMax, amount)
+        }
+        state.focus = state.focus.copy(amounts = amounts)
     }
 
     override suspend fun clearBackground(fadeMs: Long, block: Boolean) {
@@ -478,6 +491,9 @@ class ComposeStoryRenderer(
         stickerJobs.values.flatten().forEach { it.cancel() }
         stickerJobs.clear()
         stickerTweenQueues.clear()
+        focusJobs.values.forEach { it.cancel() }
+        focusJobs.clear()
+        internalFocusStates.clear()
         state.dialogue = DialogueVisualState(visible = false)
         state.decision = DecisionVisualState(visible = false)
         state.video = VideoVisualState(visible = false)
@@ -678,7 +694,6 @@ class ComposeStoryRenderer(
         val durationMs = input.durationMs ?: 0L
         val jobs = mutableListOf<Job>()
 
-        // 1. Focus management
         if (input.focusMode != null && input.focusSlots != null) {
             val activeSet = input.focusSlots.toSet()
             state.characters.forEach { (s, c) ->
@@ -686,7 +701,6 @@ class ComposeStoryRenderer(
             }
         }
 
-        // 2. Character image swap & crossfade
         var updated = current
         val hasNewChar = input.characterKey != null && input.expression != null
         val isDifferentChar = hasNewChar && (input.characterKey != current.characterKey || input.expression != current.expression)
@@ -730,7 +744,6 @@ class ComposeStoryRenderer(
             }
         }
 
-        // 3. Movement
         val move = characterSlotMove(updated, input)
         if (move != null) {
             if (durationMs > 0 && input.action != "setpos") {
@@ -755,7 +768,6 @@ class ComposeStoryRenderer(
             }
         }
 
-        // 4. Zoom
         val zoom = characterSlotZoom(updated, input)
         if (zoom != null) {
             if (durationMs > 0) {
@@ -792,7 +804,6 @@ class ComposeStoryRenderer(
             }
         }
 
-        // 5. Shake & Shakemove
         if ((input.action == "shake" || input.action == "shakemove") && durationMs > 0) {
             val power = max(0f, input.power ?: 10f)
             val randomness = (input.randomness ?: 90).coerceIn(0, 100)
@@ -819,7 +830,6 @@ class ComposeStoryRenderer(
             addCharSlotJob(slot, shakeJob)
         }
 
-        // 6. Jump
         if (input.action == "jump" && durationMs > 0) {
             val power = max(0f, input.power ?: 20f)
             val times = max(1, input.times ?: 1)
@@ -841,7 +851,6 @@ class ComposeStoryRenderer(
             addCharSlotJob(slot, jumpJob)
         }
 
-        // 7. Rotation
         if (input.angle != null) {
             val fromAngle = updated.rotationDeg
             val dir = if (input.inverse == true) -1f else 1f
@@ -863,7 +872,6 @@ class ComposeStoryRenderer(
             }
         }
 
-        // 8. Opacity
         if (input.alphaFrom != null || input.alphaTo != null) {
             val fromA = input.alphaFrom ?: updated.alpha
             val toA = input.alphaTo ?: fromA
@@ -1410,7 +1418,6 @@ class ComposeStoryRenderer(
             charName = input.charName
         )
 
-        // Template size scaling animation
         if (input.templateSizeDurationMs > 0) {
             val from = input.templateSizeFrom
             val to = input.templateSizeTo
@@ -1431,7 +1438,6 @@ class ComposeStoryRenderer(
             channelState = channelState.copy(maskWidth = baseW, maskHeight = baseH)
         }
 
-        // Element track
         if (input.type != 0) {
             val slot = input.slot.ifEmpty { "m" }
             val existingElem = channelState.elements[slot]
@@ -1600,7 +1606,6 @@ class ComposeStoryRenderer(
         )
         state.cgItems[key] = targetSlot
 
-        // Position track
         if (input.positionFrom != null && input.positionTo != null) {
             val fromP = input.positionFrom
             val toP = input.positionTo
@@ -1617,7 +1622,6 @@ class ComposeStoryRenderer(
             jobs.add(pJob)
         }
 
-        // Scale track
         if (input.scaleFrom != input.scaleTo) {
             val fromS = input.scaleFrom
             val toS = input.scaleTo
@@ -1631,7 +1635,6 @@ class ComposeStoryRenderer(
             jobs.add(sJob)
         }
 
-        // Color/Alpha track
         if (input.colorFrom != null && input.colorTo != null) {
             val fromC = input.colorFrom
             val toC = input.colorTo
@@ -1663,7 +1666,6 @@ class ComposeStoryRenderer(
             jobs.add(aJob)
         }
 
-        // Rotation track
         if (input.rotationFrom <= 0f && input.rotationDurationMs > 0) {
             val fromR = input.rotationFrom
             val toR = input.rotationTo
@@ -1763,7 +1765,6 @@ class ComposeStoryRenderer(
             }
         }
 
-        // Snap initial state for all steps at t=0
         for (w in windows) {
             applyStep(w.step, 0f)
         }

@@ -134,10 +134,10 @@ data class CameraVisualState(
 data class FocusVisualState(
     val blur: Boolean = true,
     val colorMode: FocusColorMode = FocusColorMode.NONE,
-    val amount: Float = 0f,
-    val targetType: String = "",
-    val targetId: String = ""
-)
+    val amounts: Map<String, Float> = emptyMap()
+) {
+    fun getAmount(target: String): Float = amounts[target] ?: 0f
+}
 
 data class CharacterCutinSlotState(
     val widgetId: String,
