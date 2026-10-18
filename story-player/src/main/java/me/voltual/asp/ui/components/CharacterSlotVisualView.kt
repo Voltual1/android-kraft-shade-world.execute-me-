@@ -9,11 +9,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
@@ -67,9 +67,9 @@ fun CharacterSlotVisualView(
     val currentVisual = visual ?: oldVisual ?: return
     val linkNode = currentVisual.linkNode
 
-    // Layout calculation according to AVG native CharacterPanel
-    val sizeX = linkNode?.size?.x?.takeIf { it > 0f } ?: 1024f
-    val sizeY = linkNode?.size?.y?.takeIf { it > 0f } ?: 1024f
+    // Layout calculation strictly aligned with Web PixiStoryRenderer.ts & native CharacterPanel
+    val sizeX = linkNode?.size?.x?.takeIf { it > 0f } ?: currentVisual.sourceWidth.takeIf { it > 0f } ?: 1024f
+    val sizeY = linkNode?.size?.y?.takeIf { it > 0f } ?: currentVisual.sourceHeight.takeIf { it > 0f } ?: 1024f
     val offsetX = linkNode?.pos?.x ?: 0f
     val offsetY = linkNode?.pos?.y ?: 0f
 
@@ -97,7 +97,6 @@ fun CharacterSlotVisualView(
 
     Box(
         modifier = modifier
-            .fillMaxSize()
             .offset {
                 IntOffset(
                     x = targetX.roundToInt(),
@@ -105,9 +104,13 @@ fun CharacterSlotVisualView(
                 )
             }
             .size(width = sizeX.dp, height = sizeY.dp)
-            .alpha(charSlot.alpha.coerceIn(0f, 1f))
-            .scale(charSlot.scaleX, charSlot.scaleY)
-            .rotate(charSlot.rotationDeg),
+            .graphicsLayer {
+                scaleX = charSlot.scaleX
+                scaleY = charSlot.scaleY
+                rotationZ = charSlot.rotationDeg
+                alpha = charSlot.alpha.coerceIn(0f, 1f)
+                transformOrigin = TransformOrigin(0.5f, 0.5f)
+            },
         contentAlignment = Alignment.Center
     ) {
         // Render previous character when crossfading
@@ -116,7 +119,9 @@ fun CharacterSlotVisualView(
                 RenderArtVisual(
                     art = oldVis,
                     colorFilter = colorFilter,
-                    modifier = Modifier.fillMaxSize().alpha(charSlot.oldCharAlpha.coerceIn(0f, 1f))
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .alpha(charSlot.oldCharAlpha.coerceIn(0f, 1f))
                 )
             }
         }
@@ -127,7 +132,9 @@ fun CharacterSlotVisualView(
             RenderArtVisual(
                 art = curVis,
                 colorFilter = colorFilter,
-                modifier = Modifier.fillMaxSize().alpha(curAlpha.coerceIn(0f, 1f))
+                modifier = Modifier
+                    .fillMaxSize()
+                    .alpha(curAlpha.coerceIn(0f, 1f))
             )
         }
     }
@@ -144,7 +151,7 @@ private fun RenderArtVisual(
             Image(
                 bitmap = art.bitmap.asImageBitmap(),
                 contentDescription = null,
-                contentScale = ContentScale.Fit,
+                contentScale = ContentScale.FillBounds,
                 colorFilter = colorFilter,
                 modifier = modifier
             )
@@ -153,7 +160,7 @@ private fun RenderArtVisual(
             AsyncImage(
                 model = art.url,
                 contentDescription = null,
-                contentScale = ContentScale.Fit,
+                contentScale = ContentScale.FillBounds,
                 colorFilter = colorFilter,
                 modifier = modifier
             )

@@ -18,8 +18,22 @@ import me.voltual.asp.engine.resolveStoryCharacterAssetByKey
 
 sealed interface CharacterArtVisual {
     val linkNode: StoryLinkNode?
-    data class SingleUrl(val url: String, override val linkNode: StoryLinkNode?) : CharacterArtVisual
-    data class BakedBitmap(val bitmap: Bitmap, override val linkNode: StoryLinkNode?) : CharacterArtVisual
+    val sourceWidth: Float
+    val sourceHeight: Float
+
+    data class SingleUrl(
+        val url: String,
+        override val linkNode: StoryLinkNode?,
+        override val sourceWidth: Float = 0f,
+        override val sourceHeight: Float = 0f
+    ) : CharacterArtVisual
+
+    data class BakedBitmap(
+        val bitmap: Bitmap,
+        override val linkNode: StoryLinkNode?,
+        override val sourceWidth: Float = bitmap.width.toFloat(),
+        override val sourceHeight: Float = bitmap.height.toFloat()
+    ) : CharacterArtVisual
 }
 
 object FaceOverlayBaker {
@@ -44,7 +58,20 @@ object FaceOverlayBaker {
         // 1. Single complete image
         if (item.group == -1 && !item.image.isNullOrEmpty()) {
             val url = resolveStoryCharacterAssetByKey(item.image) ?: return@withContext null
-            return@withContext CharacterArtVisual.SingleUrl(url, link)
+            val imageLoader = ImageLoader(androidContext)
+            val request = ImageRequest.Builder(androidContext).data(url).build()
+            val result = imageLoader.execute(request)
+            val (w, h) = if (result is SuccessResult) {
+                result.image.width.toFloat() to result.image.height.toFloat()
+            } else {
+                1024f to 1024f
+            }
+            return@withContext CharacterArtVisual.SingleUrl(
+                url = url,
+                linkNode = link,
+                sourceWidth = w,
+                sourceHeight = h
+            )
         }
 
         // 2. Face overlay group

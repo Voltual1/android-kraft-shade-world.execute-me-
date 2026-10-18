@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.TransformOrigin
@@ -268,6 +269,7 @@ fun StoryPlayerScreen(
         Box(
             modifier = Modifier
                 .requiredSize(1280.dp, 720.dp)
+                .clipToBounds()
                 .graphicsLayer {
                     scaleX = scale
                     scaleY = scale
@@ -357,8 +359,7 @@ fun StoryPlayerScreen(
                     state.characters.values.forEach { charSlot ->
                         CharacterSlotVisualView(
                             charSlot = charSlot,
-                            context = curContext,
-                            modifier = Modifier.fillMaxSize()
+                            context = curContext
                         )
                     }
                 }
@@ -482,7 +483,5 @@ fun StoryPlayerScreen(
                 modifier = Modifier.fillMaxSize()
             )
         }
-
-        // TODO: 完善控制栏 UI (多档位速度切换、进度跳转、Log All 抽屉交互)
     }
 }
