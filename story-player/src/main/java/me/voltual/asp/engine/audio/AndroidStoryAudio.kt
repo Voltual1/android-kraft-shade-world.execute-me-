@@ -2,10 +2,13 @@ package me.voltual.asp.engine.audio
 
 import android.content.Context as AndroidContext
 import android.net.Uri
+import android.util.Log
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -45,6 +48,8 @@ class AndroidStoryAudio(
         .setUsage(C.USAGE_MEDIA)
         .build()
 
+    // 关键修正：必须使用 DefaultDataSource.Factory 包装 HttpDataSource，
+    // 使得 Media3 能够无缝兼容网络 URL 以及本地 file:///android_asset/... 资源！
     private val mediaSourceFactory by lazy {
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
             .setUserAgent(USER_AGENT)
@@ -53,7 +58,9 @@ class AndroidStoryAudio(
             .setReadTimeoutMs(15_000)
             .setAllowCrossProtocolRedirects(true)
 
-        DefaultMediaSourceFactory(context).setDataSourceFactory(httpDataSourceFactory)
+        val defaultDataSourceFactory = DefaultDataSource.Factory(context, httpDataSourceFactory)
+
+        DefaultMediaSourceFactory(context).setDataSourceFactory(defaultDataSourceFactory)
     }
 
     private fun createPlayer(): ExoPlayer {
@@ -62,6 +69,11 @@ class AndroidStoryAudio(
             .build()
             .apply {
                 setAudioAttributes(this@AndroidStoryAudio.audioAttributes, true)
+                addListener(object : Player.Listener {
+                    override fun onPlayerError(error: PlaybackException) {
+                        Log.e("AndroidStoryAudio", "Media3 playback error: ${error.message}", error)
+                    }
+                })
             }
     }
 

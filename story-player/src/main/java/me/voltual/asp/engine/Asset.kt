@@ -23,11 +23,33 @@ fun encodePathSegments(path: String): String {
     }
 }
 
+/**
+ * 将音频 key 或变量值解析为完整的音频文件路径：
+ * 1. 若以 sound_beta_2 开头，替换为 assets/audio；
+ * 2. 若是未带目录的短音效名（如 d_gen_xxx, b_char_xxx），自动匹配到对应的子目录。
+ */
 private fun audioUrlFromValue(value: String): String {
     val origin = getAssetOrigin()
     val assetsBase = "$origin/assets/"
-    val replaced = value.lowercase().replace("sound_beta_2", "${assetsBase}audio")
-    return "$replaced.mp3"
+    val lower = value.lowercase()
+
+    if (lower.contains("sound_beta_2")) {
+        val replaced = lower.replace("sound_beta_2", "${assetsBase}audio")
+        return "$replaced.mp3"
+    }
+
+    // 处理短音效路径映射（对齐方舟内部音频包分类）
+    val subPath = when {
+        lower.startsWith("d_gen_") || lower.startsWith("d_sp_") -> "avg/$lower"
+        lower.startsWith("b_char_") -> "battle/b_char/$lower"
+        lower.startsWith("d_avg_") -> "dialog/$lower"
+        lower.startsWith("e_atk_") -> "enemy/e_atk/$lower"
+        lower.startsWith("g_ui_") -> "general/g_ui/$lower"
+        lower.contains('/') -> lower
+        else -> "avg/$lower"
+    }
+
+    return "${assetsBase}audio/$subPath.mp3"
 }
 
 private fun normalizeAssetPath(rawPath: String): String {

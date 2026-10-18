@@ -268,11 +268,11 @@ suspend fun loadContextFromAssets(
         emptyMap()
     }
 
-    // 5. 读取并解析 story_variables.json
+    // 5. 读取并解析 story_variables.json（键统一转换为小写，匹配剧本中的 $查询）
     val audioVariables = try {
         val varJsonText = assetManager.open("$cleanDir/story_variables.json").bufferedReader().use { it.readText() }
         val root = Json.parseToJsonElement(varJsonText).jsonObject
-        root.mapValues { (_, v) -> v.jsonPrimitive.content }
+        root.entries.associate { (k, v) -> k.lowercase() to v.jsonPrimitive.content }
     } catch (_: Throwable) {
         emptyMap()
     }
