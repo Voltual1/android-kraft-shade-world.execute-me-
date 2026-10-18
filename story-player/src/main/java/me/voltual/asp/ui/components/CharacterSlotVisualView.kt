@@ -76,7 +76,7 @@ fun CharacterSlotVisualView(
         mutableFloatStateOf(currentVisual.sourceHeight.takeIf { it > 0f } ?: 1024f)
     }
 
-    // 计算实际宽高：保持原图真实宽高比，防止被硬编码正方形压扁
+    // 优先采用配置的 size，否则保持原图实际宽高
     val configuredWidth = linkNode?.size?.x?.takeIf { it > 0f }
     val configuredHeight = linkNode?.size?.y?.takeIf { it > 0f }
 
@@ -96,10 +96,14 @@ fun CharacterSlotVisualView(
     val offsetX = linkNode?.pos?.x ?: 0f
     val offsetY = linkNode?.pos?.y ?: 0f
 
-    // 核心黑技巧：以底部中心作为容器承载点！
-    // 中心点坐标：X = slotBaseX + offsetX + actionX，Y = STORY_HEIGHT - offsetY + actionY
-    val centerX = (SLOT_BASE_X[charSlot.slot] ?: 640f) + offsetX + charSlot.totalOffsetX
-    val centerY = STORY_HEIGHT - offsetY + charSlot.totalOffsetY
+    // 严格对齐 Web 版 PixiStoryRenderer.ts 的 Top-Left 绝对排版坐标公式：
+    // targetX = (slotBaseX[slot] ?? slotBaseX.m) - sizeX / 2 + offsetX + totalOffsetX
+    // targetY = STORY_HEIGHT - sizeY / 2 - offsetY + totalOffsetY
+    val baseX = (SLOT_BASE_X[charSlot.slot] ?: 640f) - sizeX / 2f + offsetX
+    val baseY = STORY_HEIGHT - sizeY / 2f - offsetY
+
+    val targetX = baseX + charSlot.totalOffsetX
+    val targetY = baseY + charSlot.totalOffsetY
 
     val colorFilter = if (charSlot.dimmed) {
         ColorFilter.colorMatrix(
@@ -108,7 +112,7 @@ fun CharacterSlotVisualView(
                     0.5f, 0f, 0f, 0f, 0f,
                     0f, 0.5f, 0f, 0f, 0f,
                     0f, 0f, 0.5f, 0f, 0f,
-                    0f, 0f, 0.5f, 1f, 0f
+                    0f, 0f, 0f, 1f, 0f
                 )
             )
         )
@@ -116,52 +120,33 @@ fun CharacterSlotVisualView(
         null
     }
 
-    // 1. 在底部中心放置一个零大小的锚点
+    // 通过 wrapContentSize(Alignment.TopStart, unbounded = true) 彻底解除 720dp 高度约束限制，
+    // 使得 requiredSize 能够以原比例自由超出屏幕下方，而 Top-Left 精确落在 targetX, targetY
     Box(
         modifier = modifier
+            .fillMaxSize()
+            .wrapContentSize(align = Alignment.TopStart, unbounded = true)
             .offset {
                 IntOffset(
-                    x = centerX.roundToInt(),
-                    y = centerY.roundToInt()
+                    x = targetX.roundToInt(),
+                    y = targetY.roundToInt()
                 )
             }
-            .wrapContentSize(align = Alignment.Center, unbounded = true)
+            .requiredSize(width = sizeX.dp, height = sizeY.dp)
+            .graphicsLayer {
+                scaleX = charSlot.scaleX
+                scaleY = charSlot.scaleY
+                rotationZ = charSlot.rotationDeg
+                alpha = charSlot.alpha.coerceIn(0f, 1f)
+                transformOrigin = TransformOrigin(0.5f, 0.5f)
+            },
+        contentAlignment = Alignment.Center
     ) {
-        // 2. 立绘自身中心贴合锚点，尺寸完全突破父级限制
-        Box(
-            modifier = Modifier
-                .requiredSize(width = sizeX.dp, height = sizeY.dp)
-                .graphicsLayer {
-                    scaleX = charSlot.scaleX
-                    scaleY = charSlot.scaleY
-                    rotationZ = charSlot.rotationDeg
-                    alpha = charSlot.alpha.coerceIn(0f, 1f)
-                    transformOrigin = TransformOrigin(0.5f, 0.5f)
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            // 交叉淡出时的旧立绘
-            if (charSlot.oldCharacterKey != null && charSlot.oldCharAlpha > 0f) {
-                oldVisual?.let { oldVis ->
-                    RenderArtVisual(
-                        art = oldVis,
-                        colorFilter = colorFilter,
-                        onIntrinsicSizeDetermined = { w, h ->
-                            intrinsicWidth = w
-                            intrinsicHeight = h
-                        },
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .alpha(charSlot.oldCharAlpha.coerceIn(0f, 1f))
-                    )
-                }
-            }
-
-            // 当前立绘
-            visual?.let { curVis ->
-                val curAlpha = if (charSlot.oldCharacterKey != null) (1f - charSlot.oldCharAlpha) else 1f
+        // 交叉淡出时的旧立绘
+        if (charSlot.oldCharacterKey != null && charSlot.oldCharAlpha > 0f) {
+            oldVisual?.let { oldVis ->
                 RenderArtVisual(
-                    art = curVis,
+                    art = oldVis,
                     colorFilter = colorFilter,
                     onIntrinsicSizeDetermined = { w, h ->
                         intrinsicWidth = w
@@ -169,9 +154,25 @@ fun CharacterSlotVisualView(
                     },
                     modifier = Modifier
                         .fillMaxSize()
-                        .alpha(curAlpha.coerceIn(0f, 1f))
+                        .alpha(charSlot.oldCharAlpha.coerceIn(0f, 1f))
                 )
             }
+        }
+
+        // 当前立绘
+        visual?.let { curVis ->
+            val curAlpha = if (charSlot.oldCharacterKey != null) (1f - charSlot.oldCharAlpha) else 1f
+            RenderArtVisual(
+                art = curVis,
+                colorFilter = colorFilter,
+                onIntrinsicSizeDetermined = { w, h ->
+                    intrinsicWidth = w
+                    intrinsicHeight = h
+                },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .alpha(curAlpha.coerceIn(0f, 1f))
+            )
         }
     }
 }
