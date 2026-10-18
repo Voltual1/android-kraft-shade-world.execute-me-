@@ -1,5 +1,7 @@
 package me.voltual.asp.ui.components
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -105,19 +107,28 @@ fun CharacterSlotVisualView(
     val targetX = baseX + charSlot.totalOffsetX
     val targetY = baseY + charSlot.totalOffsetY
 
-    val colorFilter = if (charSlot.dimmed) {
-        ColorFilter.colorMatrix(
-            ColorMatrix(
-                floatArrayOf(
-                    0.5f, 0f, 0f, 0f, 0f,
-                    0f, 0.5f, 0f, 0f, 0f,
-                    0f, 0f, 0.5f, 0f, 0f,
-                    0f, 0f, 0f, 1f, 0f
+    // 未说话人物变暗为 0.5 亮度，提供 150ms 呼吸过渡平滑切换明暗
+    val animatedBrightness by animateFloatAsState(
+        targetValue = if (charSlot.dimmed) 0.5f else 1f,
+        animationSpec = tween(durationMillis = 150),
+        label = "char_slot_dimmed_brightness"
+    )
+
+    val colorFilter = remember(animatedBrightness) {
+        if (animatedBrightness < 0.999f) {
+            ColorFilter.colorMatrix(
+                ColorMatrix(
+                    floatArrayOf(
+                        animatedBrightness, 0f, 0f, 0f, 0f,
+                        0f, animatedBrightness, 0f, 0f, 0f,
+                        0f, 0f, animatedBrightness, 0f, 0f,
+                        0f, 0f, 0f, 1f, 0f
+                    )
                 )
             )
-        )
-    } else {
-        null
+        } else {
+            null
+        }
     }
 
     // 通过 wrapContentSize(Alignment.TopStart, unbounded = true) 彻底解除 720dp 高度约束限制，

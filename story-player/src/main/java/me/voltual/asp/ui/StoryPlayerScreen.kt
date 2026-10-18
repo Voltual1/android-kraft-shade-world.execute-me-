@@ -348,7 +348,7 @@ fun StoryPlayerScreen(
                     modifier = Modifier.fillMaxSize()
                 )
 
-                // Layer 1.5: Characters Slots
+                // Layer 1.5: Characters Slots (按 zIndex 升序排序绘制，确保高亮说话者处于最上层)
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -357,7 +357,7 @@ fun StoryPlayerScreen(
                             charFocusColorFilter?.let { colorFilter = it }
                         }
                 ) {
-                    state.characters.values.forEach { charSlot ->
+                    state.characters.values.sortedBy { it.zIndex }.forEach { charSlot ->
                         CharacterSlotVisualView(
                             charSlot = charSlot,
                             context = curContext

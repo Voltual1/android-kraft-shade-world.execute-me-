@@ -879,25 +879,68 @@ class ComposeStoryRenderer(
         val durationMs = input.durationMs ?: 0L
         val jobs = mutableListOf<Job>()
 
+        // 1. charslot focus 处理
         if (input.focusMode != null && input.focusSlots != null) {
             val activeSet = input.focusSlots.toSet()
             state.characters.forEach { (s, c) ->
-                state.characters[s] = c.copy(dimmed = !activeSet.contains(s))
+                val isDimmed = !activeSet.contains(s)
+                val z = if (!isDimmed) 1f else 0f
+                state.characters[s] = c.copy(dimmed = isDimmed, zIndex = z)
             }
         }
 
-        var updated = current
+        // 2. character 经典指令焦点与变暗计算
+        val targetDimmed = if (input.focusMode != null && input.focusSlots != null) {
+            !input.focusSlots.contains(slot)
+        } else {
+            input.dimmed
+        }
+
+        // 根据 Native / Web applyCharacterZOrder 计算聚焦角色的层级 (focus=1: r,m,l; focus=2: l,m,r; else: l,r,m)
+        val targetZIndex = if (input.focus != null) {
+            val ufocus = input.focus.toLong() and 0xFFFFFFFFL
+            val order = when (ufocus) {
+                1L -> listOf("r", "m", "l")
+                2L -> listOf("l", "m", "r")
+                else -> listOf("l", "r", "m")
+            }
+            order.indexOf(slot).takeIf { it != -1 }?.toFloat() ?: 0f
+        } else {
+            state.characters[slot]?.zIndex ?: 0f
+        }
+
+        // 同步更新其他槽位的 zIndex，确保高亮说话者处于最顶层
+        if (input.focus != null) {
+            val ufocus = input.focus.toLong() and 0xFFFFFFFFL
+            val order = when (ufocus) {
+                1L -> listOf("r", "m", "l")
+                2L -> listOf("l", "m", "r")
+                else -> listOf("l", "r", "m")
+            }
+            state.characters.forEach { (s, c) ->
+                if (s != slot) {
+                    val z = order.indexOf(s).takeIf { it != -1 }?.toFloat() ?: 0f
+                    state.characters[s] = c.copy(zIndex = z)
+                }
+            }
+        }
+
+        var updated = (state.characters[slot] ?: current).copy(
+            dimmed = targetDimmed,
+            zIndex = targetZIndex
+        )
+
         val hasNewChar = input.characterKey != null && input.expression != null
-        val isDifferentChar = hasNewChar && (input.characterKey != current.characterKey || input.expression != current.expression)
+        val isDifferentChar = hasNewChar && (input.characterKey != updated.characterKey || input.expression != updated.expression)
 
         if (hasNewChar) {
             val replaceFade = input.replaceFadeMs ?: durationMs
-            if (isDifferentChar && replaceFade > 0 && current.characterKey != null) {
-                updated = current.copy(
+            if (isDifferentChar && replaceFade > 0 && updated.characterKey != null) {
+                updated = updated.copy(
                     characterKey = input.characterKey,
                     expression = input.expression,
-                    oldCharacterKey = current.characterKey,
-                    oldExpression = current.expression,
+                    oldCharacterKey = updated.characterKey,
+                    oldExpression = updated.expression,
                     oldCharAlpha = 1f
                 )
                 state.characters[slot] = updated
@@ -918,7 +961,7 @@ class ComposeStoryRenderer(
                 jobs.add(fadeJob)
                 addCharSlotJob(slot, fadeJob)
             } else {
-                updated = current.copy(
+                updated = updated.copy(
                     characterKey = input.characterKey,
                     expression = input.expression,
                     oldCharacterKey = null,
@@ -927,6 +970,8 @@ class ComposeStoryRenderer(
                 )
                 state.characters[slot] = updated
             }
+        } else {
+            state.characters[slot] = updated
         }
 
         val move = characterSlotMove(updated, input)
@@ -1456,20 +1501,20 @@ class ComposeStoryRenderer(
     }
 
     override fun setDialogue(
-    speaker: String,
-    text: String,
-    tagStyles: RichTagStyles?,
-    layout: DialogueLayout?
-) {
-    state.dialogue = DialogueVisualState(
-        visible = true,
-        speaker = speaker,
-        text = text,
-        tagStyles = tagStyles ?: state.dialogue.tagStyles,
-        layout = layout ?: state.dialogue.layout,
-        isExpanded = state.dialogue.isExpanded
-    )
-}
+        speaker: String,
+        text: String,
+        tagStyles: RichTagStyles?,
+        layout: DialogueLayout?
+    ) {
+        state.dialogue = DialogueVisualState(
+            visible = true,
+            speaker = speaker,
+            text = text,
+            tagStyles = tagStyles ?: state.dialogue.tagStyles,
+            layout = layout ?: state.dialogue.layout,
+            isExpanded = state.dialogue.isExpanded
+        )
+    }
 
     override fun hideDialogue() {
         state.dialogue = state.dialogue.copy(visible = false)
