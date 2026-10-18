@@ -211,12 +211,13 @@ fun DialogueBox(
 
     val activeWordWrapWidth = if (isMessageWidthExpanded) MESSAGE_WIDTH + 24f else MESSAGE_WIDTH
 
+    // 直接在 1280x720 的舞台容器中绝对定位各个图层与文字
     Box(
         modifier = modifier
             .fillMaxSize()
             .alpha(animatedAlpha.coerceIn(0f, 1f))
     ) {
-        // Top edge shadow cutscene (102dp height, upside-down)
+        // 顶部阴影渐变条 (高 102dp，倒置)
         Image(
             painter = painterResource(id = R.drawable.sprite_avg_cutscene),
             contentDescription = null,
@@ -229,7 +230,7 @@ fun DialogueBox(
                 .alpha(0.7059f)
         )
 
-        // Bottom dialog frame cutscene (182dp height)
+        // 底部对话框暗色框架 (高 182dp，位于 720 - 182 = 538dp)
         Image(
             painter = painterResource(id = R.drawable.sprite_avg_cutscene),
             contentDescription = null,
@@ -240,7 +241,7 @@ fun DialogueBox(
                 .align(Alignment.BottomCenter)
         )
 
-        // Speaker Name (Right aligned inside name region)
+        // 说话人名称：按舞台全局绝对坐标 (NAME_LEFT, currentSpeakerY) 排版，右对齐
         if (dialogue.speaker.isNotEmpty()) {
             Text(
                 text = dialogue.speaker,
@@ -255,7 +256,7 @@ fun DialogueBox(
             )
         }
 
-        // Message body with rich-text annotations and dynamic positioning
+        // 对白正文：按舞台全局绝对坐标 (currentMessageX, currentMessageY) 排版
         val messageAnnotated = parseTaggedTextToAnnotated(dialogue.text)
         Text(
             text = messageAnnotated,

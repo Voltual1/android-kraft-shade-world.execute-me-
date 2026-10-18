@@ -1456,20 +1456,20 @@ class ComposeStoryRenderer(
     }
 
     override fun setDialogue(
-        speaker: String,
-        text: String,
-        tagStyles: RichTagStyles?,
-        layout: DialogueLayout?
-    ) {
-        state.dialogue = DialogueVisualState(
-            visible = true,
-            speaker = speaker,
-            text = text,
-            tagStyles = tagStyles ?: state.dialogue.tagStyles,
-            layout = layout ?: state.dialogue.layout,
-            isExpanded = state.dialogue.isExpanded
-        )
-    }
+    speaker: String,
+    text: String,
+    tagStyles: RichTagStyles?,
+    layout: DialogueLayout?
+) {
+    state.dialogue = DialogueVisualState(
+        visible = true,
+        speaker = speaker,
+        text = text,
+        tagStyles = tagStyles ?: state.dialogue.tagStyles,
+        layout = layout ?: state.dialogue.layout,
+        isExpanded = state.dialogue.isExpanded
+    )
+}
 
     override fun hideDialogue() {
         state.dialogue = state.dialogue.copy(visible = false)
