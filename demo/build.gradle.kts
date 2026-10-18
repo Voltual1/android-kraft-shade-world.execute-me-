@@ -102,4 +102,6 @@ dependencies {
     
     implementation(libs.kotlinx.io)
     
+    // Story Player 模块
+    implementation(project(":story-player"))
 }
