@@ -347,7 +347,7 @@ fun StoryPlayerScreen(
                     modifier = Modifier.fillMaxSize()
                 )
 
-                // Layer 1.5: Characters Slots (移除对子项的 fillMaxSize 污染)
+                // Layer 1.5: Characters Slots
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
