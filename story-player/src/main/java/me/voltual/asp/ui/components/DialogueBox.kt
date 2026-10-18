@@ -104,7 +104,6 @@ fun DialogueBox(
     dialogue: DialogueVisualState,
     modifier: Modifier = Modifier
 ) {
-    // 150ms Linear fade-in / fade-out aligned with Web DialogPanel.HIDE_FADE_MS
     val animatedAlpha by animateFloatAsState(
         targetValue = if (dialogue.visible) 1f else 0f,
         animationSpec = tween(durationMillis = HIDE_FADE_MS, easing = LinearEasing),
@@ -116,17 +115,13 @@ fun DialogueBox(
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
 
-    // State preserved across typewriter frames for the same command
     var currentSpeakerFontSize by remember { mutableIntStateOf(NAME_FONT_MAX) }
     var currentSpeakerY by remember { mutableFloatStateOf(STORY_HEIGHT - BOTTOM_HEIGHT + NAME_TOP) }
     var currentMessageX by remember { mutableFloatStateOf(STORY_WIDTH * MESSAGE_ANCHOR_X + MESSAGE_LEFT) }
     var currentMessageY by remember { mutableFloatStateOf(STORY_HEIGHT - MESSAGE_TOP) }
     var isMessageWidthExpanded by remember { mutableStateOf(false) }
 
-    val rawTextForMeasure = dialogue.layout?.text ?: dialogue.text
-
-    // When text or speaker changes, calculate BestFit and Y-floating offset
-    LaunchedEffect(rawTextForMeasure, dialogue.speaker) {
+    LaunchedEffect(dialogue.layout, dialogue.speaker) {
         val speaker = dialogue.speaker
         var bestFontSize = NAME_FONT_MAX
         val nameWidthLimitPx = with(density) { NAME_WIDTH.dp.toPx() }
@@ -164,45 +159,50 @@ fun DialogueBox(
         }
         currentSpeakerY = (STORY_HEIGHT - BOTTOM_HEIGHT + NAME_TOP) - max(0f, speakerMeasureHeight - NAME_MAX_HEIGHT)
 
-        val isAside = dialogue.layout?.executor == "aside"
-        currentMessageX = STORY_WIDTH * MESSAGE_ANCHOR_X + if (isAside) MESSAGE_ASIDE_LEFT else MESSAGE_LEFT
+        val layout = dialogue.layout
+        if (layout != null) {
+            val isAside = layout.executor == "aside"
+            val baseX = STORY_WIDTH * MESSAGE_ANCHOR_X + if (isAside) MESSAGE_ASIDE_LEFT else MESSAGE_LEFT
+            currentMessageX = baseX
 
-        val baseWidthPx = with(density) { MESSAGE_WIDTH.dp.toPx() }.toInt()
-        val firstMeasure = textMeasurer.measure(
-            text = AnnotatedString(rawTextForMeasure),
-            style = TextStyle(
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Medium,
-                fontFamily = FontFamily.SansSerif,
-                lineHeight = 32.sp
-            ),
-            constraints = Constraints(maxWidth = baseWidthPx)
-        )
-        val firstHeightDp = with(density) { firstMeasure.size.height.toDp().value }
+            val baseWidthPx = with(density) { MESSAGE_WIDTH.dp.toPx() }.toInt()
+            val textToMeasure = layout.text
 
-        var finalHeightDp = firstHeightDp
-        if (dialogue.layout?.executor != "endtip" && firstHeightDp >= MESSAGE_MAX_HEIGHT) {
-            isMessageWidthExpanded = true
-            val expandedWidthPx = with(density) { (MESSAGE_WIDTH + 24f).dp.toPx() }.toInt()
-            val secondMeasure = textMeasurer.measure(
-                text = AnnotatedString(rawTextForMeasure),
+            val firstMeasure = textMeasurer.measure(
+                text = AnnotatedString(textToMeasure),
                 style = TextStyle(
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Medium,
                     fontFamily = FontFamily.SansSerif,
                     lineHeight = 32.sp
                 ),
-                constraints = Constraints(maxWidth = expandedWidthPx)
+                constraints = Constraints(maxWidth = baseWidthPx)
             )
-            finalHeightDp = with(density) { secondMeasure.size.height.toDp().value }
-        } else {
-            isMessageWidthExpanded = false
-        }
+            val firstHeightDp = with(density) { firstMeasure.size.height.toDp().value }
 
-        currentMessageY = (STORY_HEIGHT - MESSAGE_TOP) - max(0f, finalHeightDp - MESSAGE_MAX_HEIGHT)
+            var finalHeightDp = firstHeightDp
+            if (layout.executor != "endtip" && firstHeightDp >= MESSAGE_MAX_HEIGHT) {
+                isMessageWidthExpanded = true
+                val expandedWidthPx = with(density) { (MESSAGE_WIDTH + 24f).dp.toPx() }.toInt()
+                val secondMeasure = textMeasurer.measure(
+                    text = AnnotatedString(textToMeasure),
+                    style = TextStyle(
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Medium,
+                        fontFamily = FontFamily.SansSerif,
+                        lineHeight = 32.sp
+                    ),
+                    constraints = Constraints(maxWidth = expandedWidthPx)
+                )
+                finalHeightDp = with(density) { secondMeasure.size.height.toDp().value }
+            } else {
+                isMessageWidthExpanded = false
+            }
+
+            currentMessageY = (STORY_HEIGHT - MESSAGE_TOP) - max(0f, finalHeightDp - MESSAGE_MAX_HEIGHT)
+        }
     }
 
-    // Restore word wrap width when finishDialogueCommand is triggered
     LaunchedEffect(dialogue.isExpanded) {
         if (!dialogue.isExpanded) {
             isMessageWidthExpanded = false
@@ -240,7 +240,7 @@ fun DialogueBox(
                 .align(Alignment.BottomCenter)
         )
 
-        // Speaker Name (Right aligned inside name region, anchor (1, 0))
+        // Speaker Name (Right aligned inside name region)
         if (dialogue.speaker.isNotEmpty()) {
             Text(
                 text = dialogue.speaker,
