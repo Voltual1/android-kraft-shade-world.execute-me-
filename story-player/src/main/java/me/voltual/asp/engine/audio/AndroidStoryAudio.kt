@@ -48,8 +48,6 @@ class AndroidStoryAudio(
         .setUsage(C.USAGE_MEDIA)
         .build()
 
-    // 关键修正：必须使用 DefaultDataSource.Factory 包装 HttpDataSource，
-    // 使得 Media3 能够无缝兼容网络 URL 以及本地 file:///android_asset/... 资源！
     private val mediaSourceFactory by lazy {
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
             .setUserAgent(USER_AGENT)
@@ -113,6 +111,7 @@ class AndroidStoryAudio(
         val identity = "${introUrl ?: ""}\n$mainUrl"
         musicBaseVolume = input.volume
 
+        // 如果是相同曲目且已经在播放，直接更新音量即可
         if (activeMusicIdentity == identity && activeMusicPlayer != null) {
             setMusicVolume(input.volume, 0)
             return@withContext
@@ -134,14 +133,19 @@ class AndroidStoryAudio(
         val crossfade = previousPlayer != null && input.crossfadeMs > 10L
         nextPlayer.volume = if (crossfade) 0f else musicBaseVolume
 
+        // 建立播放逻辑：若有 intro 则先播 intro，播完无缝衔接 loop 且设置循环
         if (introUrl != null) {
             val introItem = MediaItem.fromUri(Uri.parse(introUrl))
-            val loopItem = MediaItem.fromUri(Uri.parse(mainUrl))
-            nextPlayer.setMediaItems(listOf(introItem, loopItem))
+            nextPlayer.setMediaItem(introItem)
+            nextPlayer.repeatMode = Player.REPEAT_MODE_OFF
             nextPlayer.addListener(object : Player.Listener {
-                override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                    if (nextPlayer.currentMediaItemIndex == 1) {
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (playbackState == Player.STATE_ENDED && activeMusicPlayer == nextPlayer && !isDestroyed) {
+                        val loopItem = MediaItem.fromUri(Uri.parse(mainUrl))
+                        nextPlayer.setMediaItem(loopItem)
                         nextPlayer.repeatMode = Player.REPEAT_MODE_ONE
+                        nextPlayer.prepare()
+                        nextPlayer.play()
                     }
                 }
             })
@@ -154,6 +158,7 @@ class AndroidStoryAudio(
         nextPlayer.prepare()
         nextPlayer.play()
 
+        // 上一首音乐如果有的话，执行淡出并释放
         if (previousPlayer != null) {
             if (crossfade) {
                 audioScope.launch {
@@ -165,6 +170,7 @@ class AndroidStoryAudio(
             }
         }
 
+        // 新音乐如果有 crossfade，执行淡入
         if (crossfade) {
             musicFadeJob = audioScope.launch {
                 tweenVolume(nextPlayer, 0f, musicBaseVolume, input.crossfadeMs)
@@ -173,7 +179,6 @@ class AndroidStoryAudio(
     }
 
     override suspend fun stopMusic(fadeMs: Long): Unit = withContext(Dispatchers.Main.immediate) {
-        musicRequestId++
         val player = activeMusicPlayer ?: return@withContext
         activeMusicPlayer = null
         activeMusicIdentity = null
