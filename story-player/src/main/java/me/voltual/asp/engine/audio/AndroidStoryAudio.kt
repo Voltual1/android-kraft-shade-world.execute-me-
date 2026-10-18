@@ -1,19 +1,29 @@
 package me.voltual.asp.engine.audio
 
-import android.content.Context
+import android.content.Context as AndroidContext
 import android.net.Uri
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import kotlinx.coroutines.*
+import me.voltual.asp.Context as StoryContext
 import me.voltual.asp.engine.PlayMusicInput
 import me.voltual.asp.engine.PlaySoundInput
 import me.voltual.asp.engine.StoryAudio
+import me.voltual.asp.engine.resolveStoryAudioByKey
 import kotlin.math.max
 
-class AndroidStoryAudio(private val context: Context) : StoryAudio {
+private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+private const val REFERER = "https://prts.wiki/"
+
+class AndroidStoryAudio(
+    private val context: AndroidContext,
+    private val storyContext: StoryContext
+) : StoryAudio {
 
     private val audioScope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())
 
@@ -35,10 +45,28 @@ class AndroidStoryAudio(private val context: Context) : StoryAudio {
         .setUsage(C.USAGE_MEDIA)
         .build()
 
+    private val mediaSourceFactory by lazy {
+        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+            .setUserAgent(USER_AGENT)
+            .setDefaultRequestProperties(mapOf("Referer" to REFERER))
+            .setConnectTimeoutMs(15_000)
+            .setReadTimeoutMs(15_000)
+            .setAllowCrossProtocolRedirects(true)
+
+        DefaultMediaSourceFactory(context).setDataSourceFactory(httpDataSourceFactory)
+    }
+
     private fun createPlayer(): ExoPlayer {
-        return ExoPlayer.Builder(context).build().apply {
-            setAudioAttributes(this@AndroidStoryAudio.audioAttributes, true)
-        }
+        return ExoPlayer.Builder(context)
+            .setMediaSourceFactory(mediaSourceFactory)
+            .build()
+            .apply {
+                setAudioAttributes(this@AndroidStoryAudio.audioAttributes, true)
+            }
+    }
+
+    private fun resolveAudioUrl(key: String): String? {
+        return resolveStoryAudioByKey(key, storyContext.audioVariables)
     }
 
     override fun destroy() {
@@ -66,7 +94,11 @@ class AndroidStoryAudio(private val context: Context) : StoryAudio {
     override suspend fun playMusic(input: PlayMusicInput): Unit = withContext(Dispatchers.Main.immediate) {
         if (isDestroyed) return@withContext
 
-        val identity = "${input.intro ?: ""}\n${input.key}"
+        val mainUrl = resolveAudioUrl(input.key) ?: return@withContext
+        val rawIntroUrl = input.intro?.let { resolveAudioUrl(it) }
+        val introUrl = if (rawIntroUrl != null && rawIntroUrl != mainUrl) rawIntroUrl else null
+
+        val identity = "${introUrl ?: ""}\n$mainUrl"
         musicBaseVolume = input.volume
 
         if (activeMusicIdentity == identity && activeMusicPlayer != null) {
@@ -90,9 +122,9 @@ class AndroidStoryAudio(private val context: Context) : StoryAudio {
         val crossfade = previousPlayer != null && input.crossfadeMs > 10L
         nextPlayer.volume = if (crossfade) 0f else musicBaseVolume
 
-        if (input.intro != null) {
-            val introItem = MediaItem.fromUri(Uri.parse(input.intro))
-            val loopItem = MediaItem.fromUri(Uri.parse(input.key))
+        if (introUrl != null) {
+            val introItem = MediaItem.fromUri(Uri.parse(introUrl))
+            val loopItem = MediaItem.fromUri(Uri.parse(mainUrl))
             nextPlayer.setMediaItems(listOf(introItem, loopItem))
             nextPlayer.addListener(object : Player.Listener {
                 override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -102,7 +134,7 @@ class AndroidStoryAudio(private val context: Context) : StoryAudio {
                 }
             })
         } else {
-            val loopItem = MediaItem.fromUri(Uri.parse(input.key))
+            val loopItem = MediaItem.fromUri(Uri.parse(mainUrl))
             nextPlayer.setMediaItem(loopItem)
             nextPlayer.repeatMode = Player.REPEAT_MODE_ONE
         }
@@ -162,6 +194,7 @@ class AndroidStoryAudio(private val context: Context) : StoryAudio {
     override suspend fun playSound(input: PlaySoundInput): Unit = withContext(Dispatchers.Main.immediate) {
         if (isDestroyed) return@withContext
 
+        val url = resolveAudioUrl(input.key) ?: return@withContext
         val channel = input.channel
         val requestId = (soundRequestIds[channel] ?: 0) + 1
         soundRequestIds[channel] = requestId
@@ -181,7 +214,7 @@ class AndroidStoryAudio(private val context: Context) : StoryAudio {
         val soundPlayer = createPlayer()
         soundChannels[channel] = soundPlayer
 
-        val soundItem = MediaItem.fromUri(Uri.parse(input.key))
+        val soundItem = MediaItem.fromUri(Uri.parse(url))
         soundPlayer.setMediaItem(soundItem)
         soundPlayer.repeatMode = if (input.loop) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
         soundPlayer.volume = soundBaseVolumes[channel] ?: input.volume
