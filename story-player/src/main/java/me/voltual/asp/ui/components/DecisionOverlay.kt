@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -30,7 +31,7 @@ fun DecisionOverlay(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.5f))
+            .background(Color.Black.copy(alpha = 0.55f))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null
@@ -39,8 +40,8 @@ fun DecisionOverlay(
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.width(480.dp)
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+            modifier = Modifier.width(640.dp)
         ) {
             decision.options.forEachIndexed { index, option ->
                 val interactionSource = remember { MutableInteractionSource() }
@@ -49,14 +50,14 @@ fun DecisionOverlay(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(46.dp)
+                        .height(58.dp)
                         .background(
-                            color = if (isPressed) Color(0xFF505050) else Color(0xFF303030),
+                            color = if (isPressed) Color(0xFF505050) else Color(0xFF282828),
                             shape = RoundedCornerShape(4.dp)
                         )
                         .border(
                             width = 2.dp,
-                            color = Color.White,
+                            color = Color(0xFFE0E0E0),
                             shape = RoundedCornerShape(4.dp)
                         )
                         .clickable(
@@ -70,10 +71,11 @@ fun DecisionOverlay(
                     Text(
                         text = option,
                         color = Color.White,
-                        fontSize = 16.sp,
+                        fontSize = 22.sp,
                         fontWeight = FontWeight.Medium,
+                        fontFamily = FontFamily.SansSerif,
                         textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 16.dp)
+                        modifier = Modifier.padding(horizontal = 24.dp)
                     )
                 }
             }

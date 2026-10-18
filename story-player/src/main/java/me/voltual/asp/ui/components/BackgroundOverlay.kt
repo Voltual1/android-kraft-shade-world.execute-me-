@@ -1,6 +1,5 @@
 package me.voltual.asp.ui.components
 
-import android.graphics.Bitmap
 import android.graphics.Matrix
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -13,7 +12,6 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImagePainter
@@ -30,29 +28,31 @@ import kotlin.math.roundToInt
 
 /**
  * 依据 Web 端 nativeBackgroundRect 计算官方 Native 显示矩形：
- * - 优先读取 background.json 的 PPU：(width / ppu) * 100
- * - 若接近 16:9，则映射为标准的 1280x720
- * - 缺省则采用原始纹理像素大小
+ * - 仅当资产属于 BACKGROUND 时才应用 background.json 的 PPU 或 16:9 铺满；
+ * - IMAGE 插图（如 avg_0_1, avg_0_2 等）严格保持自身的实际像素尺寸，不被拉伸也不填充伪背景。
  */
 private fun calculateNativeRect(
     key: String,
     rawWidth: Float,
     rawHeight: Float,
+    family: StoryAssetFamily,
     backgroundPpuMap: Map<String, Float>?
 ): Pair<Float, Float> {
-    val ppu = backgroundPpuMap?.get(key.lowercase())
-    if (ppu != null && ppu > 0f) {
-        return Pair((rawWidth / ppu) * 100f, (rawHeight / ppu) * 100f)
-    }
-    if (abs(rawWidth / rawHeight - STORY_WIDTH.toFloat() / STORY_HEIGHT.toFloat()) < 0.01f) {
-        return Pair(STORY_WIDTH.toFloat(), STORY_HEIGHT.toFloat())
+    if (family == StoryAssetFamily.BACKGROUND) {
+        val ppu = backgroundPpuMap?.get(key.lowercase())
+        if (ppu != null && ppu > 0f) {
+            return Pair((rawWidth / ppu) * 100f, (rawHeight / ppu) * 100f)
+        }
+        if (abs(rawWidth / rawHeight - STORY_WIDTH.toFloat() / STORY_HEIGHT.toFloat()) < 0.01f) {
+            return Pair(STORY_WIDTH.toFloat(), STORY_HEIGHT.toFloat())
+        }
     }
     return Pair(rawWidth, rawHeight)
 }
 
 /**
  * 依据 Web 端 layoutImageForScreenAdapt 计算适配尺寸：
- * 支持 fill / width / height / coverall / showall 及宽高乘数
+ * 仅在明确传入 screenAdapt 参数时才做缩放，否则保持原尺寸。
  */
 private fun layoutForScreenAdapt(
     nativeWidth: Float,
@@ -120,19 +120,15 @@ fun BackgroundOverlay(
     val painter = rememberAsyncImagePainter(model = url)
     val painterState = painter.state
 
-    val (rawWidth, rawHeight) = when (painterState) {
-        is AsyncImagePainter.State.Success -> {
-            val sz = painter.intrinsicSize
-            Pair(
-                if (sz.width > 0f) sz.width else STORY_WIDTH.toFloat(),
-                if (sz.height > 0f) sz.height else STORY_HEIGHT.toFloat()
-            )
-        }
-        else -> Pair(STORY_WIDTH.toFloat(), STORY_HEIGHT.toFloat())
-    }
+    // 若图片尚未就绪则不盲目按 1280x720 占位，避免画面闪烁变形
+    if (painterState !is AsyncImagePainter.State.Success) return
 
-    val (nativeWidth, nativeHeight) = remember(key, rawWidth, rawHeight, context.backgroundPpuMap) {
-        calculateNativeRect(key, rawWidth, rawHeight, context.backgroundPpuMap)
+    val sz = painter.intrinsicSize
+    val rawWidth = if (sz.width > 0f) sz.width else 1024f
+    val rawHeight = if (sz.height > 0f) sz.height else 1024f
+
+    val (nativeWidth, nativeHeight) = remember(key, rawWidth, rawHeight, family, context.backgroundPpuMap) {
+        calculateNativeRect(key, rawWidth, rawHeight, family, context.backgroundPpuMap)
     }
 
     val (layoutWidth, layoutHeight) = remember(
@@ -160,7 +156,7 @@ fun BackgroundOverlay(
             .fillMaxSize()
             .alpha(background.alpha.coerceIn(0f, 1f))
     ) {
-        if (background.tiled && painterState is AsyncImagePainter.State.Success) {
+        if (background.tiled) {
             val bitmap = painterState.result.image.toBitmap()
             // Tiled repeat drawing with alignTilesToLowerLeft compensation
             Canvas(
@@ -193,9 +189,6 @@ fun BackgroundOverlay(
                 val paint = android.graphics.Paint().apply {
                     isAntiAlias = true
                     this.shader = shader
-                    colorFilter?.let {
-                        // Apply ColorFilter if provided
-                    }
                 }
 
                 drawIntoCanvas { canvas ->

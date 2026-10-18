@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -27,7 +28,6 @@ import me.voltual.asp.Context
 import me.voltual.asp.R
 import me.voltual.asp.engine.*
 import me.voltual.asp.engine.audio.AndroidStoryAudio
-import me.voltual.asp.engine.log.buildLogAll
 import me.voltual.asp.engine.rendering.ComposeStoryRenderer
 import me.voltual.asp.engine.rendering.buildColorEffectColorMatrix
 import me.voltual.asp.engine.rendering.shader.SlideMaskKraftShader
@@ -53,9 +53,6 @@ fun StoryPlayerScreen(
     var preloadProgress by remember { mutableStateOf(0f) }
     var preloadError by remember { mutableStateOf<String?>(null) }
 
-    var activeLineIndex by remember { mutableStateOf<Int?>(null) }
-    var showLogAll by remember { mutableStateOf(false) }
-
     val kraftEffectState = rememberKraftShadeEffectState()
     val slideMaskShader = remember { SlideMaskKraftShader() }
 
@@ -75,7 +72,7 @@ fun StoryPlayerScreen(
             val ctx = loadContextByScript(scriptText)
             storyContext = ctx
 
-            val sndAudio = AndroidStoryAudio(androidContext, ctx)
+            val sndAudio = AndroidStoryAudio(androidContext)
             audio = sndAudio
 
             val rdr = ComposeStoryRenderer(ctx, coroutineScope = coroutineScope)
@@ -83,10 +80,6 @@ fun StoryPlayerScreen(
 
             val rt = StoryRuntime(ctx, rdr, sndAudio)
             runtime = rt
-
-            rt.onDisplayedLineChange { line ->
-                activeLineIndex = line
-            }
 
             // Execute full asset scan and pre-cache resources (images to Coil3, audio via Ktor)
             preloadContextAssets(
@@ -266,16 +259,20 @@ fun StoryPlayerScreen(
                 }
             }
     ) {
-        // Stage Scale: calculate 16:9 1280x720 aspect ratio fitting
+        // Stage Scale: calculate exact 16:9 1280x720 aspect ratio fitting scale
         val viewWidth = maxWidth
         val viewHeight = maxHeight
         val scale = minOf(viewWidth / 1280.dp, viewHeight / 720.dp)
-        val stageWidth = 1280.dp * scale
-        val stageHeight = 720.dp * scale
 
+        // 1280x720 Standard Virtual Stage (Scaled to fit the screen proportionally)
         Box(
             modifier = Modifier
-                .size(stageWidth, stageHeight)
+                .requiredSize(1280.dp, 720.dp)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    transformOrigin = TransformOrigin(0.5f, 0.5f)
+                }
                 .align(Alignment.Center)
                 .offset {
                     IntOffset(
@@ -484,80 +481,8 @@ fun StoryPlayerScreen(
                 video = state.video,
                 modifier = Modifier.fillMaxSize()
             )
-
-            // Layer 12: Fast-Control Top Overlay
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp)
-                    .align(Alignment.TopEnd),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Button(
-                    onClick = { showLogAll = true },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Black.copy(alpha = 0.6f))
-                ) {
-                    Text("文本记录", fontSize = 12.sp)
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                Button(
-                    onClick = {
-                        val nextMode = when (curRuntime.getAutoPlayState().mode) {
-                            AutoPlayMode.DEFAULT -> AutoPlayMode.BUTTON_AUTO
-                            AutoPlayMode.BUTTON_AUTO -> AutoPlayMode.QUICK_PLAY
-                            AutoPlayMode.QUICK_PLAY -> AutoPlayMode.DEFAULT
-                        }
-                        curRuntime.setAutoPlayMode(nextMode)
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Black.copy(alpha = 0.6f))
-                ) {
-                    val modeText = when (curRuntime.getAutoPlayState().mode) {
-                        AutoPlayMode.DEFAULT -> "手动"
-                        AutoPlayMode.BUTTON_AUTO -> "自动"
-                        AutoPlayMode.QUICK_PLAY -> "快速"
-                    }
-                    Text(modeText, fontSize = 12.sp)
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                Button(
-                    enabled = curRuntime.canSkipNode(),
-                    onClick = {
-                        coroutineScope.launch {
-                            curRuntime.skipNode()
-                            if (curRuntime.getState() == PlayerState.FINISHED) {
-                                onFinished()
-                            }
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Black.copy(alpha = 0.6f))
-                ) {
-                    Text("跳过", fontSize = 12.sp)
-                }
-            }
         }
 
-        // Drawer: Log All Panel
-        if (showLogAll) {
-            val logDoc = remember(curContext.scriptText, curContext.audioVariables) {
-                val parsedLines = curContext.scriptText?.let { parseStory(it).first }
-                    ?: curContext.script.mapIndexed { index, line -> parseLine(line, index + 1) }
-                buildLogAll(parsedLines, curContext.audioVariables)
-            }
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.5f))
-                    .clickable { showLogAll = false }
-            ) {
-                LogAllPanel(
-                    document = logDoc,
-                    activeLineIndex = activeLineIndex,
-                    selections = curRuntime.getLogPosition().selections,
-                    onClose = { showLogAll = false },
-                    modifier = Modifier.align(Alignment.CenterEnd)
-                )
-            }
-        }
+        // TODO: 完善控制栏 UI (多档位速度切换、进度跳转、Log All 抽屉交互)
     }
 }
