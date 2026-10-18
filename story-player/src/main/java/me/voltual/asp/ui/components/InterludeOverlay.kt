@@ -115,14 +115,15 @@ private fun RenderSingleInterludeElement(
         .alpha(elem.alpha.coerceIn(0f, 1f))
 
     if (elem.type == 3) {
-        // Type 3: AVG Character avatar
+        // Type 3: AVG Character avatar (裁剪保留上半身)
         characterVisual?.let { art ->
             when (art) {
                 is CharacterArtVisual.BakedBitmap -> {
                     Image(
                         bitmap = art.bitmap.asImageBitmap(),
                         contentDescription = null,
-                        contentScale = ContentScale.Fit,
+                        contentScale = ContentScale.Crop,
+                        alignment = Alignment.TopCenter,
                         modifier = elementModifier
                     )
                 }
@@ -130,7 +131,8 @@ private fun RenderSingleInterludeElement(
                     AsyncImage(
                         model = art.url,
                         contentDescription = null,
-                        contentScale = ContentScale.Fit,
+                        contentScale = ContentScale.Crop,
+                        alignment = Alignment.TopCenter,
                         modifier = elementModifier
                     )
                 }

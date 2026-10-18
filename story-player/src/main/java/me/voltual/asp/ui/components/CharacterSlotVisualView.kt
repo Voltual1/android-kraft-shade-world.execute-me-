@@ -9,6 +9,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.TransformOrigin
@@ -18,8 +19,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImagePainter
-import coil3.compose.rememberAsyncImagePainter
+import coil3.compose.AsyncImage
 import me.voltual.asp.Context
 import me.voltual.asp.engine.STORY_HEIGHT
 import me.voltual.asp.engine.rendering.CharacterArtVisual
@@ -68,22 +68,11 @@ fun CharacterSlotVisualView(
     val currentVisual = visual ?: oldVisual ?: return
     val linkNode = currentVisual.linkNode
 
-    // 优先从配置取 size，若未配置或为0则从图片自身尺寸获取
-    var intrinsicWidth by remember(currentVisual) {
-        mutableFloatStateOf(currentVisual.sourceWidth.takeIf { it > 0f } ?: 1024f)
-    }
-    var intrinsicHeight by remember(currentVisual) {
-        mutableFloatStateOf(currentVisual.sourceHeight.takeIf { it > 0f } ?: 1024f)
-    }
-
-    val sizeX = linkNode?.size?.x?.takeIf { it > 0f } ?: intrinsicWidth
-    val sizeY = linkNode?.size?.y?.takeIf { it > 0f } ?: intrinsicHeight
+    val sizeX = linkNode?.size?.x?.takeIf { it > 0f } ?: currentVisual.sourceWidth.takeIf { it > 0f } ?: 1024f
+    val sizeY = linkNode?.size?.y?.takeIf { it > 0f } ?: currentVisual.sourceHeight.takeIf { it > 0f } ?: 1024f
     val offsetX = linkNode?.pos?.x ?: 0f
     val offsetY = linkNode?.pos?.y ?: 0f
 
-    // 严密对齐 Web PixiStoryRenderer.ts 锚点计算公式：
-    // targetX = (slotBaseX[slot] ?? slotBaseX.m) - sizeX / 2 + offsetX
-    // targetY = STORY_HEIGHT - sizeY / 2 - offsetY
     val baseX = (SLOT_BASE_X[charSlot.slot] ?: 640f) - sizeX / 2f + offsetX
     val baseY = STORY_HEIGHT - sizeY / 2f - offsetY
 
@@ -106,7 +95,6 @@ fun CharacterSlotVisualView(
         null
     }
 
-    // 关键点：使用 requiredSize 突破父容器的 720dp 高度约束，使立绘下半身自然溢出屏幕
     Box(
         modifier = modifier
             .offset {
@@ -122,8 +110,9 @@ fun CharacterSlotVisualView(
                 rotationZ = charSlot.rotationDeg
                 alpha = charSlot.alpha.coerceIn(0f, 1f)
                 transformOrigin = TransformOrigin(0.5f, 0.5f)
-            },
-        contentAlignment = Alignment.Center
+            }
+            .clipToBounds(),
+        contentAlignment = Alignment.TopCenter
     ) {
         // 交叉淡入淡出时的旧立绘
         if (charSlot.oldCharacterKey != null && charSlot.oldCharAlpha > 0f) {
@@ -131,12 +120,6 @@ fun CharacterSlotVisualView(
                 RenderArtVisual(
                     art = oldVis,
                     colorFilter = colorFilter,
-                    onIntrinsicSizeDetermined = { w, h ->
-                        if (linkNode?.size?.x == null || linkNode.size.x <= 0f) {
-                            intrinsicWidth = w
-                            intrinsicHeight = h
-                        }
-                    },
                     modifier = Modifier
                         .fillMaxSize()
                         .alpha(charSlot.oldCharAlpha.coerceIn(0f, 1f))
@@ -150,12 +133,6 @@ fun CharacterSlotVisualView(
             RenderArtVisual(
                 art = curVis,
                 colorFilter = colorFilter,
-                onIntrinsicSizeDetermined = { w, h ->
-                    if (linkNode?.size?.x == null || linkNode.size.x <= 0f) {
-                        intrinsicWidth = w
-                        intrinsicHeight = h
-                    }
-                },
                 modifier = Modifier
                     .fillMaxSize()
                     .alpha(curAlpha.coerceIn(0f, 1f))
@@ -168,37 +145,25 @@ fun CharacterSlotVisualView(
 private fun RenderArtVisual(
     art: CharacterArtVisual,
     colorFilter: ColorFilter?,
-    onIntrinsicSizeDetermined: (Float, Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
     when (art) {
         is CharacterArtVisual.BakedBitmap -> {
-            LaunchedEffect(art.bitmap) {
-                onIntrinsicSizeDetermined(art.bitmap.width.toFloat(), art.bitmap.height.toFloat())
-            }
             Image(
                 bitmap = art.bitmap.asImageBitmap(),
                 contentDescription = null,
-                contentScale = ContentScale.Fit,
+                contentScale = ContentScale.Crop,
+                alignment = Alignment.TopCenter,
                 colorFilter = colorFilter,
                 modifier = modifier
             )
         }
         is CharacterArtVisual.SingleUrl -> {
-            val painter = rememberAsyncImagePainter(model = art.url)
-            val state = painter.state
-            LaunchedEffect(state) {
-                if (state is AsyncImagePainter.State.Success) {
-                    val size = painter.intrinsicSize
-                    if (size.width > 0f && size.height > 0f) {
-                        onIntrinsicSizeDetermined(size.width, size.height)
-                    }
-                }
-            }
-            Image(
-                painter = painter,
+            AsyncImage(
+                model = art.url,
                 contentDescription = null,
-                contentScale = ContentScale.Fit,
+                contentScale = ContentScale.Crop,
+                alignment = Alignment.TopCenter,
                 colorFilter = colorFilter,
                 modifier = modifier
             )

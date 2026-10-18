@@ -153,7 +153,8 @@ private fun RenderArtContent(
             Image(
                 bitmap = visual.bitmap.asImageBitmap(),
                 contentDescription = null,
-                contentScale = ContentScale.Fit,
+                contentScale = ContentScale.Crop,
+                alignment = Alignment.TopCenter,
                 modifier = modifier.alpha(alpha.coerceIn(0f, 1f))
             )
         }
@@ -161,7 +162,8 @@ private fun RenderArtContent(
             AsyncImage(
                 model = visual.url,
                 contentDescription = null,
-                contentScale = ContentScale.Fit,
+                contentScale = ContentScale.Crop,
+                alignment = Alignment.TopCenter,
                 modifier = modifier.alpha(alpha.coerceIn(0f, 1f))
             )
         }
