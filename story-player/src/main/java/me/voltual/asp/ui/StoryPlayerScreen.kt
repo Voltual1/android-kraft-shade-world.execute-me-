@@ -72,7 +72,7 @@ fun StoryPlayerScreen(
             val ctx = loadContextByScript(scriptText)
             storyContext = ctx
 
-            val sndAudio = AndroidStoryAudio(androidContext)
+            val sndAudio = AndroidStoryAudio(androidContext, ctx)
             audio = sndAudio
 
             val rdr = ComposeStoryRenderer(ctx, coroutineScope = coroutineScope)
