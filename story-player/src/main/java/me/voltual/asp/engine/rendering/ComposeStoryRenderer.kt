@@ -68,6 +68,9 @@ class ComposeStoryRenderer(
     private val onWarning: ((String) -> Unit)? = null
 ) : StoryRenderer {
 
+private var imageTweenSessionId = 0
+private var backgroundTweenSessionId = 0
+
     private var activeShakeJob: Job? = null
     private var pendingDecisionDeferred: CompletableDeferred<DecisionSelection>? = null
     private var activeVideoDeferred: CompletableDeferred<Unit>? = null
@@ -739,28 +742,30 @@ class ComposeStoryRenderer(
     }
 
     override suspend fun setBackgroundTween(input: BackgroundTweenInput) {
-        val current = state.background ?: return
-        val fromX = input.xFrom ?: current.x
-        val toX = input.xTo ?: current.x
-        val fromY = input.yFrom ?: current.y
-        val toY = input.yTo ?: current.y
-        val fromScaleX = input.xScaleFrom ?: current.scaleX
-        val toScaleX = input.xScaleTo ?: current.scaleX
-        val fromScaleY = input.yScaleFrom ?: current.scaleY
-        val toScaleY = input.yScaleTo ?: current.scaleY
+    val current = state.background ?: return
+    val sessionId = ++backgroundTweenSessionId
+    val fromX = input.xFrom ?: current.x
+    val toX = input.xTo ?: current.x
+    val fromY = input.yFrom ?: current.y
+    val toY = input.yTo ?: current.y
+    val fromScaleX = input.xScaleFrom ?: current.scaleX
+    val toScaleX = input.xScaleTo ?: current.scaleX
+    val fromScaleY = input.yScaleFrom ?: current.scaleY
+    val toScaleY = input.yScaleTo ?: current.scaleY
 
-        val job = coroutineScope.launch {
-            tween(input.durationMs, input.ease ?: "Linear") { progress ->
-                state.background = current.copy(
-                    x = fromX + (toX - fromX) * progress,
-                    y = fromY + (toY - fromY) * progress,
-                    scaleX = fromScaleX + (toScaleX - fromScaleX) * progress,
-                    scaleY = fromScaleY + (toScaleY - fromScaleY) * progress
-                )
-            }
+    val job = coroutineScope.launch {
+        tween(input.durationMs, input.ease ?: "Linear") { progress ->
+            if (backgroundTweenSessionId != sessionId) return@tween
+            state.background = current.copy(
+                x = fromX + (toX - fromX) * progress,
+                y = fromY + (toY - fromY) * progress,
+                scaleX = fromScaleX + (toScaleX - fromScaleX) * progress,
+                scaleY = fromScaleY + (toScaleY - fromScaleY) * progress
+            )
         }
-        if (input.block && input.durationMs > 0 && !input.loop) job.join()
     }
+    if (input.block && input.durationMs > 0 && !input.loop) job.join()
+}
 
     override suspend fun setBlocker(input: BlockerInput) {
         val initialAlpha = if (input.fadeMs > 0) input.from.a else input.to.a
@@ -1482,28 +1487,30 @@ class ComposeStoryRenderer(
     }
 
     override suspend fun setImageTween(input: ImageTweenInput) {
-        val current = state.foregroundImage ?: return
-        val fromX = input.xFrom ?: current.x
-        val toX = input.xTo ?: current.x
-        val fromY = input.yFrom ?: current.y
-        val toY = input.yTo ?: current.y
-        val fromScaleX = input.xScaleFrom ?: current.scaleX
-        val toScaleX = input.xScaleTo ?: current.scaleX
-        val fromScaleY = input.yScaleFrom ?: current.scaleY
-        val toScaleY = input.yScaleTo ?: current.scaleY
+    val current = state.foregroundImage ?: return
+    val sessionId = ++imageTweenSessionId
+    val fromX = input.xFrom ?: current.x
+    val toX = input.xTo ?: current.x
+    val fromY = input.yFrom ?: current.y
+    val toY = input.yTo ?: current.y
+    val fromScaleX = input.xScaleFrom ?: current.scaleX
+    val toScaleX = input.xScaleTo ?: current.scaleX
+    val fromScaleY = input.yScaleFrom ?: current.scaleY
+    val toScaleY = input.yScaleTo ?: current.scaleY
 
-        val job = coroutineScope.launch {
-            tween(input.durationMs, input.ease) { progress ->
-                state.foregroundImage = current.copy(
-                    x = fromX + (toX - fromX) * progress,
-                    y = fromY + (toY - fromY) * progress,
-                    scaleX = fromScaleX + (toScaleX - fromScaleX) * progress,
-                    scaleY = fromScaleY + (toScaleY - fromScaleY) * progress
-                )
-            }
+    val job = coroutineScope.launch {
+        tween(input.durationMs, input.ease) { progress ->
+            if (imageTweenSessionId != sessionId) return@tween
+            state.foregroundImage = current.copy(
+                x = fromX + (toX - fromX) * progress,
+                y = fromY + (toY - fromY) * progress,
+                scaleX = fromScaleX + (toScaleX - fromScaleX) * progress,
+                scaleY = fromScaleY + (toScaleY - fromScaleY) * progress
+            )
         }
-        if (input.block && input.durationMs > 0 && !input.loop) job.join()
     }
+    if (input.block && input.durationMs > 0 && !input.loop) job.join()
+}
 
     override suspend fun setInterlude(input: InterludeInput) {
         val channelId = input.channel
