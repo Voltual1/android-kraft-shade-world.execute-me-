@@ -12,7 +12,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -267,20 +266,16 @@ fun StoryPlayerScreen(
                 }
             }
     ) {
-        // Stage Scale: calculate exact 16:9 1280x720 aspect ratio fitting scale
+        // Stage Scale: calculate 16:9 1280x720 aspect ratio fitting
         val viewWidth = maxWidth
         val viewHeight = maxHeight
         val scale = minOf(viewWidth / 1280.dp, viewHeight / 720.dp)
+        val stageWidth = 1280.dp * scale
+        val stageHeight = 720.dp * scale
 
-        // 1280x720 Standard Virtual Stage (Scaled to fit the screen proportionally)
         Box(
             modifier = Modifier
-                .requiredSize(1280.dp, 720.dp)
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                    transformOrigin = TransformOrigin(0.5f, 0.5f)
-                }
+                .size(stageWidth, stageHeight)
                 .align(Alignment.Center)
                 .offset {
                     IntOffset(
@@ -489,56 +484,56 @@ fun StoryPlayerScreen(
                 video = state.video,
                 modifier = Modifier.fillMaxSize()
             )
-        }
 
-        // Layer 12: Fast-Control Top Overlay (始终贴合屏幕右上角便于手指触控)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp)
-                .align(Alignment.TopEnd),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Button(
-                onClick = { showLogAll = true },
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Black.copy(alpha = 0.6f))
+            // Layer 12: Fast-Control Top Overlay
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp)
+                    .align(Alignment.TopEnd),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("文本记录", fontSize = 12.sp)
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Button(
-                onClick = {
-                    val nextMode = when (curRuntime.getAutoPlayState().mode) {
-                        AutoPlayMode.DEFAULT -> AutoPlayMode.BUTTON_AUTO
-                        AutoPlayMode.BUTTON_AUTO -> AutoPlayMode.QUICK_PLAY
-                        AutoPlayMode.QUICK_PLAY -> AutoPlayMode.DEFAULT
-                    }
-                    curRuntime.setAutoPlayMode(nextMode)
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Black.copy(alpha = 0.6f))
-            ) {
-                val modeText = when (curRuntime.getAutoPlayState().mode) {
-                    AutoPlayMode.DEFAULT -> "手动"
-                    AutoPlayMode.BUTTON_AUTO -> "自动"
-                    AutoPlayMode.QUICK_PLAY -> "快速"
+                Button(
+                    onClick = { showLogAll = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Black.copy(alpha = 0.6f))
+                ) {
+                    Text("文本记录", fontSize = 12.sp)
                 }
-                Text(modeText, fontSize = 12.sp)
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Button(
-                enabled = curRuntime.canSkipNode(),
-                onClick = {
-                    coroutineScope.launch {
-                        curRuntime.skipNode()
-                        if (curRuntime.getState() == PlayerState.FINISHED) {
-                            onFinished()
+                Spacer(modifier = Modifier.width(8.dp))
+                Button(
+                    onClick = {
+                        val nextMode = when (curRuntime.getAutoPlayState().mode) {
+                            AutoPlayMode.DEFAULT -> AutoPlayMode.BUTTON_AUTO
+                            AutoPlayMode.BUTTON_AUTO -> AutoPlayMode.QUICK_PLAY
+                            AutoPlayMode.QUICK_PLAY -> AutoPlayMode.DEFAULT
                         }
+                        curRuntime.setAutoPlayMode(nextMode)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Black.copy(alpha = 0.6f))
+                ) {
+                    val modeText = when (curRuntime.getAutoPlayState().mode) {
+                        AutoPlayMode.DEFAULT -> "手动"
+                        AutoPlayMode.BUTTON_AUTO -> "自动"
+                        AutoPlayMode.QUICK_PLAY -> "快速"
                     }
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Black.copy(alpha = 0.6f))
-            ) {
-                Text("跳过", fontSize = 12.sp)
+                    Text(modeText, fontSize = 12.sp)
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Button(
+                    enabled = curRuntime.canSkipNode(),
+                    onClick = {
+                        coroutineScope.launch {
+                            curRuntime.skipNode()
+                            if (curRuntime.getState() == PlayerState.FINISHED) {
+                                onFinished()
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Black.copy(alpha = 0.6f))
+                ) {
+                    Text("跳过", fontSize = 12.sp)
+                }
             }
         }
 
