@@ -39,13 +39,14 @@ import kotlin.math.roundToInt
 @Composable
 fun StoryPlayerScreen(
     scriptText: String,
+    initialContext: Context? = null,
     modifier: Modifier = Modifier,
     onFinished: () -> Unit = {}
 ) {
     val androidContext = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
-    var storyContext by remember { mutableStateOf<Context?>(null) }
+    var storyContext by remember { mutableStateOf<Context?>(initialContext) }
     var runtime by remember { mutableStateOf<StoryRuntime?>(null) }
     var renderer by remember { mutableStateOf<ComposeStoryRenderer?>(null) }
     var audio by remember { mutableStateOf<AndroidStoryAudio?>(null) }
@@ -64,13 +65,13 @@ fun StoryPlayerScreen(
     }
 
     // Initialize context, preload media assets, and start story engine
-    LaunchedEffect(scriptText) {
+    LaunchedEffect(scriptText, initialContext) {
         isPreloading = true
         preloadProgress = 0f
         preloadError = null
 
         try {
-            val ctx = loadContextByScript(scriptText)
+            val ctx = initialContext ?: loadContextByScript(scriptText)
             storyContext = ctx
 
             val sndAudio = AndroidStoryAudio(androidContext, ctx)

@@ -13,24 +13,17 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import me.voltual.asp.Context as StoryContext
+import me.voltual.asp.loadContextFromAssets
 import me.voltual.asp.ui.StoryPlayerScreen
-import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
-import java.net.URLEncoder
-
-private const val DEFAULT_PAGE_URL = "https://m.prts.wiki/w/W2G/BEG"
-private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-private const val REFERER = "https://prts.wiki/"
 
 class OnlineStoryActivity : ComponentActivity() {
 
@@ -38,33 +31,33 @@ class OnlineStoryActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
-        val targetUrl = intent?.dataString
-            ?: intent?.getStringExtra("url")
-            ?: DEFAULT_PAGE_URL
-
         setContent {
+            val androidContext = LocalContext.current
             var scriptText by remember { mutableStateOf<String?>(null) }
+            var storyContext by remember { mutableStateOf<StoryContext?>(null) }
             var isLoading by remember { mutableStateOf(true) }
             var errorMessage by remember { mutableStateOf<String?>(null) }
             val coroutineScope = rememberCoroutineScope()
 
-            fun loadStory() {
+            fun loadLocalStory() {
                 isLoading = true
                 errorMessage = null
                 coroutineScope.launch {
                     try {
-                        val text = fetchDatasTxtFromPage(targetUrl)
+                        // 直接从本地 assets 加载 story/W2G_BEG 剧本包与全套资源
+                        val (text, ctx) = loadContextFromAssets(androidContext, "story/W2G_BEG")
                         scriptText = text
+                        storyContext = ctx
                         isLoading = false
                     } catch (e: Throwable) {
-                        errorMessage = e.message ?: "剧本获取失败"
+                        errorMessage = e.message ?: "本地剧本加载失败"
                         isLoading = false
                     }
                 }
             }
 
-            LaunchedEffect(targetUrl) {
-                loadStory()
+            LaunchedEffect(Unit) {
+                loadLocalStory()
             }
 
             Box(
@@ -81,7 +74,7 @@ class OnlineStoryActivity : ComponentActivity() {
                         ) {
                             CircularProgressIndicator(color = Color.White)
                             Text(
-                                text = "正在连接 PRTS Wiki 获取剧本...",
+                                text = "正在读取本地剧本资源...",
                                 color = Color.White,
                                 fontSize = 14.sp
                             )
@@ -107,15 +100,16 @@ class OnlineStoryActivity : ComponentActivity() {
                                 color = Color.LightGray,
                                 fontSize = 14.sp
                             )
-                            Button(onClick = { loadStory() }) {
+                            Button(onClick = { loadLocalStory() }) {
                                 Text("重试")
                             }
                         }
                     }
 
-                    scriptText != null -> {
+                    scriptText != null && storyContext != null -> {
                         StoryPlayerScreen(
                             scriptText = scriptText!!,
+                            initialContext = storyContext,
                             modifier = Modifier.fillMaxSize(),
                             onFinished = {
                                 finish()
@@ -141,69 +135,5 @@ class OnlineStoryActivity : ComponentActivity() {
         windowInsetsController.systemBarsBehavior =
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
-    }
-
-    private suspend fun fetchUrlText(urlString: String): String = withContext(Dispatchers.IO) {
-        val url = URL(urlString)
-        val connection = (url.openConnection() as HttpURLConnection).apply {
-            connectTimeout = 15_000
-            readTimeout = 15_000
-            setRequestProperty("User-Agent", USER_AGENT)
-            setRequestProperty("Referer", REFERER)
-        }
-        if (connection.responseCode !in 200..299) {
-            throw IllegalStateException("HTTP ${connection.responseCode} 连接失败: $urlString")
-        }
-        connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-    }
-
-    /**
-     * 安全解码 HTML 实体字符，保留剧情标签（不破坏 <color> 和 [command] 等标记）
-     */
-    private fun unescapeHtmlEntities(raw: String): String {
-        return raw
-            .replace("&lt;", "<")
-            .replace("&gt;", ">")
-            .replace("&quot;", "\"")
-            .replace("&apos;", "'")
-            .replace("&#39;", "'")
-            .replace("&nbsp;", "\u00A0")
-            .replace("&amp;", "&")
-    }
-
-    /**
-     * 参考示例爬虫原型抽取 #datas_txt
-     */
-    private suspend fun fetchDatasTxtFromPage(pageUrlOrPath: String): String {
-        val pageUrl = if (!pageUrlOrPath.startsWith("http://") && !pageUrlOrPath.startsWith("https://")) {
-            val pageName = pageUrlOrPath.trimStart('/')
-            val path = if (!pageName.startsWith("w/")) "w/$pageName" else pageName
-            "https://prts.wiki/$path"
-        } else {
-            pageUrlOrPath
-        }
-
-        val pageHtml = fetchUrlText(pageUrl)
-
-        // 1. 尝试匹配 <div id="datas_txt"...> 或 <textarea id="datas_txt"...>
-        val directRegex = Regex("""<[^>]+id=["']datas_txt["'][^>]*>([\s\S]*?)</(?:div|textarea)>""", RegexOption.IGNORE_CASE)
-        val directMatch = directRegex.find(pageHtml)
-        if (directMatch != null) {
-            return unescapeHtmlEntities(directMatch.groupValues[1]).trim()
-        }
-
-        // 2. 备选方案：MediaWiki Parse API 查询
-        val pageTitle = pageUrl.substringAfter("/w/")
-        val apiUrl = "https://prts.wiki/api.php?action=parse&page=${URLEncoder.encode(pageTitle, "UTF-8")}&prop=text&format=json"
-        val apiJsonText = fetchUrlText(apiUrl)
-        val apiJson = JSONObject(apiJsonText)
-        val parsedHtml = apiJson.optJSONObject("parse")?.optJSONObject("text")?.optString("*") ?: ""
-
-        val apiMatch = directRegex.find(parsedHtml)
-        if (apiMatch != null) {
-            return unescapeHtmlEntities(apiMatch.groupValues[1]).trim()
-        }
-
-        throw IllegalStateException("未能在页面中找到 #datas_txt 剧本文本: $pageUrl")
     }
 }

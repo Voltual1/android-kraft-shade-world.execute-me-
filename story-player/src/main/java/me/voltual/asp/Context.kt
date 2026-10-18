@@ -1,5 +1,6 @@
 package me.voltual.asp
 
+import android.content.Context as AndroidContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -232,4 +233,60 @@ suspend fun loadContextByScript(scriptText: String): Context = coroutineScope {
         linkMap = linkMap,
         backgroundPpuMap = backgroundPpuMap
     )
+}
+
+/**
+ * 直接从本地 assets 目录（如 "story/W2G_BEG"）读取并组装完整的剧情 Context，
+ * 支持完全离线播放。
+ */
+suspend fun loadContextFromAssets(
+    androidContext: AndroidContext,
+    storyDir: String = "story/W2G_BEG"
+): Pair<String, Context> = withContext(Dispatchers.IO) {
+    val assetManager = androidContext.assets
+    val cleanDir = storyDir.trim().removePrefix("/").removeSuffix("/")
+
+    // 1. 设置自定义本地静态资产根目录
+    customAssetOrigin = "file:///android_asset/$cleanDir"
+
+    // 2. 读取剧本 story.txt
+    val scriptText = assetManager.open("$cleanDir/story.txt").bufferedReader().use { it.readText() }
+
+    // 3. 读取并解析 character.json
+    val linkMap = try {
+        val charJsonText = assetManager.open("$cleanDir/character.json").bufferedReader().use { it.readText() }
+        normalizeCharacterMap(Json.parseToJsonElement(charJsonText))
+    } catch (_: Throwable) {
+        emptyMap()
+    }
+
+    // 4. 读取并解析 background.json
+    val backgroundPpuMap = try {
+        val bgJsonText = assetManager.open("$cleanDir/background.json").bufferedReader().use { it.readText() }
+        normalizeBackgroundPpuMap(Json.parseToJsonElement(bgJsonText))
+    } catch (_: Throwable) {
+        emptyMap()
+    }
+
+    // 5. 读取并解析 story_variables.json
+    val audioVariables = try {
+        val varJsonText = assetManager.open("$cleanDir/story_variables.json").bufferedReader().use { it.readText() }
+        val root = Json.parseToJsonElement(varJsonText).jsonObject
+        root.mapValues { (_, v) -> v.jsonPrimitive.content }
+    } catch (_: Throwable) {
+        emptyMap()
+    }
+
+    val (_, metadata) = parseStory(scriptText)
+
+    val ctx = Context(
+        script = scriptText.replace("\r\n", "\n").replace("\r", "\n").split("\n"),
+        scriptText = scriptText,
+        storyMetadata = metadata,
+        audioVariables = audioVariables,
+        linkMap = linkMap,
+        backgroundPpuMap = backgroundPpuMap
+    )
+
+    Pair(scriptText, ctx)
 }

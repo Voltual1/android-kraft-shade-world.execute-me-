@@ -311,8 +311,8 @@ private fun isAudioUrl(url: String): Boolean {
 
 /**
  * 剧情资源异步批量预加载器。
- * - 图片资源通过 Coil3 ImageLoader 预取至缓存（配合 coil-network-cache-control 与 coil-network-ktor3）；
- * - 音频与多媒体数据通过 Ktor HttpClient 请求预热；
+ * - 图片资源通过 Coil3 ImageLoader 预取至缓存（支持网络及 file:///android_asset）；
+ * - 音频与多媒体数据如果是远程 URL 通过 Ktor HttpClient 请求预热，若是本地 asset 则无需网络请求；
  * - 具备最大并发数控制与原子平滑进度报告。
  */
 suspend fun preloadContextAssets(
@@ -344,12 +344,16 @@ suspend fun preloadContextAssets(
                     semaphore.withPermit {
                         try {
                             if (isAudioUrl(url)) {
-                                // 使用 Ktor 请求音频数据以预热本地网络链路
-                                val response = client.get(url)
-                                val channel = response.bodyAsChannel()
-                                channel.discard()
+                                if (!url.startsWith("file:", ignoreCase = true) &&
+                                    !url.startsWith("asset:", ignoreCase = true)
+                                ) {
+                                    // 仅对网络音频数据通过 Ktor 预热
+                                    val response = client.get(url)
+                                    val channel = response.bodyAsChannel()
+                                    channel.discard()
+                                }
                             } else {
-                                // 使用 Coil 3 下载并缓存图片
+                                // 使用 Coil 3 预热图片（原生支持 file:///android_asset/...）
                                 val request = ImageRequest.Builder(androidContext)
                                     .data(url)
                                     .build()

@@ -4,6 +4,11 @@ import java.net.URLEncoder
 
 const val TORAPPU_ORIGIN: String = "https://torappu.prts.wiki"
 
+/** 可选的本地或自定义资源起点（例如 "file:///android_asset/story/W2G_BEG"） */
+var customAssetOrigin: String? = null
+
+fun getAssetOrigin(): String = customAssetOrigin ?: TORAPPU_ORIGIN
+
 enum class StoryAssetFamily(val folder: String) {
     BACKGROUND("background"),
     IMAGE("images"),
@@ -19,7 +24,8 @@ fun encodePathSegments(path: String): String {
 }
 
 private fun audioUrlFromValue(value: String): String {
-    val assetsBase = "$TORAPPU_ORIGIN/assets/"
+    val origin = getAssetOrigin()
+    val assetsBase = "$origin/assets/"
     val replaced = value.lowercase().replace("sound_beta_2", "${assetsBase}audio")
     return "$replaced.mp3"
 }
@@ -33,22 +39,28 @@ fun resolveAssetUrl(raw: String): String = raw
 fun resolveStoryAssetByKey(rawKey: String, family: StoryAssetFamily): String? {
     val key = normalizeImageKey(rawKey)
     if (key.isEmpty()) return null
-    return "$TORAPPU_ORIGIN/assets/avg/${family.folder}/$key.png"
+    val origin = getAssetOrigin()
+    return "$origin/assets/avg/${family.folder}/$key.png"
 }
 
 fun resolveStoryCharacterAssetByKey(rawKey: String): String? {
     val key = rawKey.trim()
     if (key.isEmpty()) return null
-    return "$TORAPPU_ORIGIN/assets/avg/characters/${encodePathSegments(key)}.png"
+    val origin = getAssetOrigin()
+    return "$origin/assets/avg/characters/${encodePathSegments(key)}.png"
 }
 
 fun resolveStoryVideoByKey(rawKey: String): String? {
     val key = normalizeAssetPath(rawKey)
     if (key.isEmpty()) return null
-    if (key.startsWith("http://", ignoreCase = true) || key.startsWith("https://", ignoreCase = true)) {
+    if (key.startsWith("http://", ignoreCase = true) ||
+        key.startsWith("https://", ignoreCase = true) ||
+        key.startsWith("file://", ignoreCase = true)
+    ) {
         return key
     }
-    return "$TORAPPU_ORIGIN/assets/${encodePathSegments(key.lowercase())}"
+    val origin = getAssetOrigin()
+    return "$origin/assets/${encodePathSegments(key.lowercase())}"
 }
 
 fun resolveStoryAudioByKey(
@@ -66,10 +78,14 @@ fun resolveStoryAudioByKey(
     }
 
     if (key.startsWith("@")) {
-        return "$TORAPPU_ORIGIN/assets/${key.substring(1)}"
+        val origin = getAssetOrigin()
+        return "$origin/assets/${key.substring(1)}"
     }
 
-    if (key.startsWith("http://", ignoreCase = true) || key.startsWith("https://", ignoreCase = true)) {
+    if (key.startsWith("http://", ignoreCase = true) ||
+        key.startsWith("https://", ignoreCase = true) ||
+        key.startsWith("file://", ignoreCase = true)
+    ) {
         return key
     }
 
