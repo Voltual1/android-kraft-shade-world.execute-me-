@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -266,17 +267,20 @@ fun StoryPlayerScreen(
                 }
             }
     ) {
-        // Stage Scale: calculate 16:9 1280x720 aspect ratio fitting
+        // Stage Scale: keep logical resolution 1280dp x 720dp, scale uniformly
         val viewWidth = maxWidth
         val viewHeight = maxHeight
         val scale = minOf(viewWidth / 1280.dp, viewHeight / 720.dp)
-        val stageWidth = 1280.dp * scale
-        val stageHeight = 720.dp * scale
 
         Box(
             modifier = Modifier
-                .size(stageWidth, stageHeight)
+                .size(1280.dp, 720.dp)
                 .align(Alignment.Center)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    transformOrigin = TransformOrigin(0.5f, 0.5f)
+                }
                 .offset {
                     IntOffset(
                         state.camera.shakeX.roundToInt(),
