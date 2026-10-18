@@ -33,19 +33,18 @@ class AndroidStoryAudio(
     private var activeMusicPlayer: ExoPlayer? = null
     private var activeMusicIdentity: String? = null
     private var musicBaseVolume: Float = 1f
-    private var musicRequestId: Int = 0
     private var musicFadeJob: Job? = null
+    private var musicPlayJob: Job? = null
 
     private val soundChannels = mutableMapOf<String, ExoPlayer>()
     private val soundBaseVolumes = mutableMapOf<String, Float>()
     private val soundFadeJobs = mutableMapOf<String, Job>()
-    private val soundRequestIds = mutableMapOf<String, Int>()
 
     private var isDestroyed = false
 
     private val audioAttributes = AudioAttributes.Builder()
         .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-        .setUsage(C.USAGE_MEDIA)
+        .setUsage(C.USAGE_GAME)
         .build()
 
     private val mediaSourceFactory by lazy {
@@ -61,12 +60,13 @@ class AndroidStoryAudio(
         DefaultMediaSourceFactory(context).setDataSourceFactory(defaultDataSourceFactory)
     }
 
+    // 关键修正：handleAudioFocus 必须为 false！BGM 与音效必须自由混音，绝不能互斥抢占音频焦点！
     private fun createPlayer(): ExoPlayer {
         return ExoPlayer.Builder(context)
             .setMediaSourceFactory(mediaSourceFactory)
             .build()
             .apply {
-                setAudioAttributes(this@AndroidStoryAudio.audioAttributes, true)
+                setAudioAttributes(audioAttributes, false)
                 addListener(object : Player.Listener {
                     override fun onPlayerError(error: PlaybackException) {
                         Log.e("AndroidStoryAudio", "Media3 playback error: ${error.message}", error)
@@ -83,6 +83,7 @@ class AndroidStoryAudio(
         isDestroyed = true
         audioScope.cancel()
 
+        musicPlayJob?.cancel()
         musicFadeJob?.cancel()
         activeMusicPlayer?.stop()
         activeMusicPlayer?.release()
@@ -98,7 +99,6 @@ class AndroidStoryAudio(
         }
         soundChannels.clear()
         soundBaseVolumes.clear()
-        soundRequestIds.clear()
     }
 
     override suspend fun playMusic(input: PlayMusicInput): Unit = withContext(Dispatchers.Main.immediate) {
@@ -111,74 +111,73 @@ class AndroidStoryAudio(
         val identity = "${introUrl ?: ""}\n$mainUrl"
         musicBaseVolume = input.volume
 
-        // 如果是相同曲目且已经在播放，直接更新音量即可
         if (activeMusicIdentity == identity && activeMusicPlayer != null) {
             setMusicVolume(input.volume, 0)
             return@withContext
         }
 
-        val requestId = ++musicRequestId
-        if (input.delayMs > 0) {
-            delay(input.delayMs)
-        }
-        if (isDestroyed || requestId != musicRequestId) return@withContext
-
-        val previousPlayer = activeMusicPlayer
-        musicFadeJob?.cancel()
-
-        val nextPlayer = createPlayer()
-        activeMusicPlayer = nextPlayer
-        activeMusicIdentity = identity
-
-        val crossfade = previousPlayer != null && input.crossfadeMs > 10L
-        nextPlayer.volume = if (crossfade) 0f else musicBaseVolume
-
-        // 建立播放逻辑：若有 intro 则先播 intro，播完无缝衔接 loop 且设置循环
-        if (introUrl != null) {
-            val introItem = MediaItem.fromUri(Uri.parse(introUrl))
-            nextPlayer.setMediaItem(introItem)
-            nextPlayer.repeatMode = Player.REPEAT_MODE_OFF
-            nextPlayer.addListener(object : Player.Listener {
-                override fun onPlaybackStateChanged(playbackState: Int) {
-                    if (playbackState == Player.STATE_ENDED && activeMusicPlayer == nextPlayer && !isDestroyed) {
-                        val loopItem = MediaItem.fromUri(Uri.parse(mainUrl))
-                        nextPlayer.setMediaItem(loopItem)
-                        nextPlayer.repeatMode = Player.REPEAT_MODE_ONE
-                        nextPlayer.prepare()
-                        nextPlayer.play()
-                    }
-                }
-            })
-        } else {
-            val loopItem = MediaItem.fromUri(Uri.parse(mainUrl))
-            nextPlayer.setMediaItem(loopItem)
-            nextPlayer.repeatMode = Player.REPEAT_MODE_ONE
-        }
-
-        nextPlayer.prepare()
-        nextPlayer.play()
-
-        // 上一首音乐如果有的话，执行淡出并释放
-        if (previousPlayer != null) {
-            if (crossfade) {
-                audioScope.launch {
-                    fadeVolumeAndRelease(previousPlayer, input.crossfadeMs)
-                }
-            } else {
-                previousPlayer.stop()
-                previousPlayer.release()
+        musicPlayJob?.cancel()
+        musicPlayJob = audioScope.launch {
+            if (input.delayMs > 0) {
+                delay(input.delayMs)
             }
-        }
+            if (isDestroyed) return@launch
 
-        // 新音乐如果有 crossfade，执行淡入
-        if (crossfade) {
-            musicFadeJob = audioScope.launch {
-                tweenVolume(nextPlayer, 0f, musicBaseVolume, input.crossfadeMs)
+            val previousPlayer = activeMusicPlayer
+            musicFadeJob?.cancel()
+
+            val nextPlayer = createPlayer()
+            activeMusicPlayer = nextPlayer
+            activeMusicIdentity = identity
+
+            val crossfade = previousPlayer != null && input.crossfadeMs > 10L
+            nextPlayer.volume = if (crossfade) 0f else musicBaseVolume
+
+            if (introUrl != null) {
+                val introItem = MediaItem.fromUri(Uri.parse(introUrl))
+                nextPlayer.setMediaItem(introItem)
+                nextPlayer.repeatMode = Player.REPEAT_MODE_OFF
+                nextPlayer.addListener(object : Player.Listener {
+                    override fun onPlaybackStateChanged(playbackState: Int) {
+                        if (playbackState == Player.STATE_ENDED && activeMusicPlayer == nextPlayer && !isDestroyed) {
+                            val loopItem = MediaItem.fromUri(Uri.parse(mainUrl))
+                            nextPlayer.setMediaItem(loopItem)
+                            nextPlayer.repeatMode = Player.REPEAT_MODE_ONE
+                            nextPlayer.prepare()
+                            nextPlayer.play()
+                        }
+                    }
+                })
+            } else {
+                val loopItem = MediaItem.fromUri(Uri.parse(mainUrl))
+                nextPlayer.setMediaItem(loopItem)
+                nextPlayer.repeatMode = Player.REPEAT_MODE_ONE
+            }
+
+            nextPlayer.prepare()
+            nextPlayer.play()
+
+            if (previousPlayer != null) {
+                if (crossfade) {
+                    audioScope.launch {
+                        fadeVolumeAndRelease(previousPlayer, input.crossfadeMs)
+                    }
+                } else {
+                    previousPlayer.stop()
+                    previousPlayer.release()
+                }
+            }
+
+            if (crossfade) {
+                musicFadeJob = audioScope.launch {
+                    tweenVolume(nextPlayer, 0f, musicBaseVolume, input.crossfadeMs)
+                }
             }
         }
     }
 
     override suspend fun stopMusic(fadeMs: Long): Unit = withContext(Dispatchers.Main.immediate) {
+        musicPlayJob?.cancel()
         val player = activeMusicPlayer ?: return@withContext
         activeMusicPlayer = null
         activeMusicIdentity = null
@@ -213,49 +212,47 @@ class AndroidStoryAudio(
 
         val url = resolveAudioUrl(input.key) ?: return@withContext
         val channel = input.channel
-        val requestId = (soundRequestIds[channel] ?: 0) + 1
-        soundRequestIds[channel] = requestId
-        soundBaseVolumes[channel] = input.volume
 
-        if (input.delayMs > 0) {
-            delay(input.delayMs)
-        }
-        if (isDestroyed || soundRequestIds[channel] != requestId) return@withContext
+        audioScope.launch {
+            if (input.delayMs > 0) {
+                delay(input.delayMs)
+            }
+            if (isDestroyed) return@launch
 
-        soundFadeJobs[channel]?.cancel()
-        soundChannels.remove(channel)?.let { prev ->
-            prev.stop()
-            prev.release()
-        }
+            soundFadeJobs[channel]?.cancel()
+            soundChannels.remove(channel)?.let { prev ->
+                prev.stop()
+                prev.release()
+            }
 
-        val soundPlayer = createPlayer()
-        soundChannels[channel] = soundPlayer
+            val soundPlayer = createPlayer()
+            soundChannels[channel] = soundPlayer
+            soundBaseVolumes[channel] = input.volume
 
-        val soundItem = MediaItem.fromUri(Uri.parse(url))
-        soundPlayer.setMediaItem(soundItem)
-        soundPlayer.repeatMode = if (input.loop) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
-        soundPlayer.volume = soundBaseVolumes[channel] ?: input.volume
+            val soundItem = MediaItem.fromUri(Uri.parse(url))
+            soundPlayer.setMediaItem(soundItem)
+            soundPlayer.repeatMode = if (input.loop) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+            soundPlayer.volume = input.volume
 
-        if (!input.loop) {
-            soundPlayer.addListener(object : Player.Listener {
-                override fun onPlaybackStateChanged(playbackState: Int) {
-                    if (playbackState == Player.STATE_ENDED) {
-                        if (soundChannels[channel] == soundPlayer) {
-                            soundChannels.remove(channel)
+            if (!input.loop) {
+                soundPlayer.addListener(object : Player.Listener {
+                    override fun onPlaybackStateChanged(playbackState: Int) {
+                        if (playbackState == Player.STATE_ENDED) {
+                            if (soundChannels[channel] == soundPlayer) {
+                                soundChannels.remove(channel)
+                            }
                             soundPlayer.release()
                         }
                     }
-                }
-            })
-        }
+                })
+            }
 
-        soundPlayer.prepare()
-        soundPlayer.play()
+            soundPlayer.prepare()
+            soundPlayer.play()
+        }
     }
 
     override suspend fun stopSound(channel: String, fadeMs: Long): Unit = withContext(Dispatchers.Main.immediate) {
-        val requestId = (soundRequestIds[channel] ?: 0) + 1
-        soundRequestIds[channel] = requestId
         soundBaseVolumes.remove(channel)
         soundFadeJobs[channel]?.cancel()
 
