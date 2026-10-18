@@ -68,8 +68,9 @@ class ComposeStoryRenderer(
     private val onWarning: ((String) -> Unit)? = null
 ) : StoryRenderer {
 
-private var imageTweenSessionId = 0
-private var backgroundTweenSessionId = 0
+    private var imageTweenSessionId = 0
+    private var backgroundTweenSessionId = 0
+    private var largeBackgroundTweenSessionId = 0
 
     private var activeShakeJob: Job? = null
     private var pendingDecisionDeferred: CompletableDeferred<DecisionSelection>? = null
@@ -160,7 +161,8 @@ private var backgroundTweenSessionId = 0
             val job = coroutineScope.launch {
                 val startAlpha = slot.alpha
                 tween(fadeMs, ease) { progress ->
-                    state.cgItems[key] = slot.copy(alpha = startAlpha * (1f - progress))
+                    val cur = state.cgItems[key] ?: return@tween
+                    state.cgItems[key] = cur.copy(alpha = startAlpha * (1f - progress))
                 }
                 state.cgItems.remove(key)
             }
@@ -178,7 +180,8 @@ private var backgroundTweenSessionId = 0
                 val snapshot = state.cgItems.toMap()
                 tween(fadeMs, ease) { progress ->
                     snapshot.forEach { (k, item) ->
-                        state.cgItems[k] = item.copy(alpha = item.alpha * (1f - progress))
+                        val cur = state.cgItems[k] ?: return@forEach
+                        state.cgItems[k] = cur.copy(alpha = item.alpha * (1f - progress))
                     }
                 }
                 state.cgItems.clear()
@@ -265,6 +268,7 @@ private var backgroundTweenSessionId = 0
     }
 
     override suspend fun clearBackground(fadeMs: Long, block: Boolean) {
+        backgroundTweenSessionId++
         val current = state.background ?: return
         if (fadeMs <= 0) {
             state.background = null
@@ -273,7 +277,7 @@ private var backgroundTweenSessionId = 0
         val job = coroutineScope.launch {
             val startAlpha = current.alpha
             tween(fadeMs) { progress ->
-                state.background = current.copy(alpha = startAlpha * (1f - progress))
+                state.background = state.background?.copy(alpha = startAlpha * (1f - progress))
             }
             state.background = null
         }
@@ -291,7 +295,8 @@ private var backgroundTweenSessionId = 0
             coroutineScope.launch {
                 val startAlpha = current.alpha
                 tween(fadeMs) { progress ->
-                    state.characters[slot] = current.copy(alpha = startAlpha * (1f - progress))
+                    val cur = state.characters[slot] ?: return@tween
+                    state.characters[slot] = cur.copy(alpha = startAlpha * (1f - progress))
                 }
                 state.characters.remove(slot)
             }
@@ -305,7 +310,8 @@ private var backgroundTweenSessionId = 0
                 val snapshot = state.characters.toMap()
                 tween(fadeMs) { progress ->
                     snapshot.forEach { (s, c) ->
-                        state.characters[s] = c.copy(alpha = c.alpha * (1f - progress))
+                        val cur = state.characters[s] ?: return@forEach
+                        state.characters[s] = cur.copy(alpha = c.alpha * (1f - progress))
                     }
                 }
                 state.characters.clear()
@@ -322,7 +328,8 @@ private var backgroundTweenSessionId = 0
             val snapshot = state.curtains.toMap()
             tween(fadeMs) { progress ->
                 snapshot.forEach { (dir, cur) ->
-                    state.curtains[dir] = cur.copy(fill = cur.fill * (1f - progress))
+                    val c = state.curtains[dir] ?: return@forEach
+                    state.curtains[dir] = c.copy(fill = cur.fill * (1f - progress))
                 }
             }
             state.curtains.clear()
@@ -331,6 +338,7 @@ private var backgroundTweenSessionId = 0
     }
 
     override suspend fun clearGridBackground(fadeMs: Long, block: Boolean) {
+        largeBackgroundTweenSessionId++
         val current = state.gridBackground ?: return
         if (fadeMs <= 0) {
             state.gridBackground = null
@@ -339,7 +347,7 @@ private var backgroundTweenSessionId = 0
         val job = coroutineScope.launch {
             val startAlpha = current.alpha
             tween(fadeMs) { progress ->
-                state.gridBackground = current.copy(alpha = startAlpha * (1f - progress))
+                state.gridBackground = state.gridBackground?.copy(alpha = startAlpha * (1f - progress))
             }
             state.gridBackground = null
         }
@@ -347,6 +355,7 @@ private var backgroundTweenSessionId = 0
     }
 
     override suspend fun clearImage(fadeMs: Long, block: Boolean) {
+        imageTweenSessionId++
         val current = state.foregroundImage ?: return
         if (fadeMs <= 0) {
             state.foregroundImage = null
@@ -355,7 +364,7 @@ private var backgroundTweenSessionId = 0
         val job = coroutineScope.launch {
             val startAlpha = current.alpha
             tween(fadeMs) { progress ->
-                state.foregroundImage = current.copy(alpha = startAlpha * (1f - progress))
+                state.foregroundImage = state.foregroundImage?.copy(alpha = startAlpha * (1f - progress))
             }
             state.foregroundImage = null
         }
@@ -375,7 +384,7 @@ private var backgroundTweenSessionId = 0
         val job = coroutineScope.launch {
             val startAlpha = current.alpha
             tween(fadeMs) { progress ->
-                state.showItem = current.copy(alpha = startAlpha * (1f - progress))
+                state.showItem = state.showItem?.copy(alpha = startAlpha * (1f - progress))
             }
             state.showItem = null
         }
@@ -394,7 +403,8 @@ private var backgroundTweenSessionId = 0
             val job = coroutineScope.launch {
                 val startAlpha = current.alpha
                 tween(fadeMs) { progress ->
-                    state.stickers[id] = current.copy(alpha = startAlpha * (1f - progress))
+                    val cur = state.stickers[id] ?: return@tween
+                    state.stickers[id] = cur.copy(alpha = startAlpha * (1f - progress))
                 }
                 state.stickers.remove(id)
             }
@@ -415,7 +425,8 @@ private var backgroundTweenSessionId = 0
             val snapshot = state.stickers.toMap()
             tween(fadeMs) { progress ->
                 snapshot.forEach { (id, s) ->
-                    state.stickers[id] = s.copy(alpha = s.alpha * (1f - progress))
+                    val cur = state.stickers[id] ?: return@forEach
+                    state.stickers[id] = cur.copy(alpha = s.alpha * (1f - progress))
                 }
             }
             state.stickers.clear()
@@ -472,9 +483,9 @@ private var backgroundTweenSessionId = 0
         coroutineScope.launch {
             val startAlpha = current.alpha
             tween(fadeMs) { progress ->
-                state.subtitle = current.copy(alpha = startAlpha * (1f - progress))
+                state.subtitle = state.subtitle.copy(alpha = startAlpha * (1f - progress))
             }
-            state.subtitle = current.copy(visible = false, text = "")
+            state.subtitle = state.subtitle.copy(visible = false, text = "")
         }
     }
 
@@ -513,6 +524,9 @@ private var backgroundTweenSessionId = 0
     }
 
     override fun destroy() {
+        imageTweenSessionId++
+        backgroundTweenSessionId++
+        largeBackgroundTweenSessionId++
         activeShakeJob?.cancel()
         pendingDecisionDeferred?.cancel()
         stopVideo()
@@ -648,7 +662,7 @@ private var backgroundTweenSessionId = 0
         val initialAlpha = if (supportsFade) (input.alphaFrom ?: existing?.alpha ?: 1f) else 1f
         val targetAlpha = if (supportsFade) (input.alphaTo ?: 0f) else 1f
 
-        var item = AvgDisplayVisualItem(
+        val item = AvgDisplayVisualItem(
             id = id,
             name = input.name,
             style = input.style,
@@ -717,6 +731,7 @@ private var backgroundTweenSessionId = 0
     }
 
     override suspend fun setBackground(key: String, input: BackgroundInput?) {
+        backgroundTweenSessionId++
         val inp = input ?: BackgroundInput()
         val target = BackgroundVisualState(
             textureKey = key,
@@ -734,7 +749,7 @@ private var backgroundTweenSessionId = 0
         if (inp.fadeMs > 0) {
             val job = coroutineScope.launch {
                 tween(inp.fadeMs) { progress ->
-                    state.background = target.copy(alpha = progress)
+                    state.background = state.background?.copy(alpha = progress)
                 }
             }
             if (inp.block) job.join()
@@ -742,30 +757,38 @@ private var backgroundTweenSessionId = 0
     }
 
     override suspend fun setBackgroundTween(input: BackgroundTweenInput) {
-    val current = state.background ?: return
-    val sessionId = ++backgroundTweenSessionId
-    val fromX = input.xFrom ?: current.x
-    val toX = input.xTo ?: current.x
-    val fromY = input.yFrom ?: current.y
-    val toY = input.yTo ?: current.y
-    val fromScaleX = input.xScaleFrom ?: current.scaleX
-    val toScaleX = input.xScaleTo ?: current.scaleX
-    val fromScaleY = input.yScaleFrom ?: current.scaleY
-    val toScaleY = input.yScaleTo ?: current.scaleY
+        val current = state.background ?: return
+        val sessionId = ++backgroundTweenSessionId
+        val fromX = input.xFrom ?: current.x
+        val toX = input.xTo ?: current.x
+        val fromY = input.yFrom ?: current.y
+        val toY = input.yTo ?: current.y
+        val fromScaleX = input.xScaleFrom ?: current.scaleX
+        val toScaleX = input.xScaleTo ?: current.scaleX
+        val fromScaleY = input.yScaleFrom ?: current.scaleY
+        val toScaleY = input.yScaleTo ?: current.scaleY
 
-    val job = coroutineScope.launch {
-        tween(input.durationMs, input.ease ?: "Linear") { progress ->
-            if (backgroundTweenSessionId != sessionId) return@tween
-            state.background = current.copy(
-                x = fromX + (toX - fromX) * progress,
-                y = fromY + (toY - fromY) * progress,
-                scaleX = fromScaleX + (toScaleX - fromScaleX) * progress,
-                scaleY = fromScaleY + (toScaleY - fromScaleY) * progress
-            )
+        state.background = state.background?.copy(
+            x = fromX,
+            y = fromY,
+            scaleX = fromScaleX,
+            scaleY = fromScaleY
+        )
+
+        val job = coroutineScope.launch {
+            tween(input.durationMs, input.ease ?: "Linear") { progress ->
+                if (backgroundTweenSessionId != sessionId) return@tween
+                val cur = state.background ?: return@tween
+                state.background = cur.copy(
+                    x = fromX + (toX - fromX) * progress,
+                    y = fromY + (toY - fromY) * progress,
+                    scaleX = fromScaleX + (toScaleX - fromScaleX) * progress,
+                    scaleY = fromScaleY + (toScaleY - fromScaleY) * progress
+                )
+            }
         }
+        if (input.block && input.durationMs > 0 && !input.loop) job.join()
     }
-    if (input.block && input.durationMs > 0 && !input.loop) job.join()
-}
 
     override suspend fun setBlocker(input: BlockerInput) {
         val initialAlpha = if (input.fadeMs > 0) input.from.a else input.to.a
@@ -1079,12 +1102,13 @@ private var backgroundTweenSessionId = 0
                     val startW = existing.maskW
                     val startH = existing.maskH
                     tween(input.fadeMs) { progress ->
+                        val cur = state.cutinSlots[widgetId] ?: return@tween
                         if (fadeStyle == "fade") {
-                            state.cutinSlots[widgetId] = existing.copy(alpha = startAlpha * (1f - progress))
+                            state.cutinSlots[widgetId] = cur.copy(alpha = startAlpha * (1f - progress))
                         } else if (isHorizontalExpand) {
-                            state.cutinSlots[widgetId] = existing.copy(maskW = startW * (1f - progress))
+                            state.cutinSlots[widgetId] = cur.copy(maskW = startW * (1f - progress))
                         } else {
-                            state.cutinSlots[widgetId] = existing.copy(maskH = startH * (1f - progress))
+                            state.cutinSlots[widgetId] = cur.copy(maskH = startH * (1f - progress))
                         }
                     }
                     state.cutinSlots.remove(widgetId)
@@ -1130,7 +1154,8 @@ private var backgroundTweenSessionId = 0
             if (input.fadeMs > 0) {
                 val job = coroutineScope.launch {
                     tween(input.fadeMs) { progress ->
-                        state.cutinSlots[widgetId] = slotState.copy(
+                        val cur = state.cutinSlots[widgetId] ?: return@tween
+                        state.cutinSlots[widgetId] = cur.copy(
                             alpha = if (fadeStyle == "fade") progress else 1f,
                             maskW = if (isHorizontalExpand) maskW * progress else maskW,
                             maskH = if (isVerticalExpand) maskH * progress else maskH
@@ -1177,7 +1202,8 @@ private var backgroundTweenSessionId = 0
             if (input.fadeMs > 0) {
                 val job = coroutineScope.launch {
                     tween(input.fadeMs) { progress ->
-                        state.cutinSlots[widgetId] = targetSlotState.copy(
+                        val cur = state.cutinSlots[widgetId] ?: return@tween
+                        state.cutinSlots[widgetId] = cur.copy(
                             rootX = fromRootX + (rootX - fromRootX) * progress,
                             rootY = fromRootY + (rootY - fromRootY) * progress,
                             maskW = fromMaskW + (maskW - fromMaskW) * progress,
@@ -1190,7 +1216,8 @@ private var backgroundTweenSessionId = 0
                             oldCharAlpha = 1f - progress
                         )
                     }
-                    state.cutinSlots[widgetId] = targetSlotState.copy(
+                    val cur = state.cutinSlots[widgetId] ?: return@launch
+                    state.cutinSlots[widgetId] = cur.copy(
                         rootX = rootX,
                         rootY = rootY,
                         maskW = maskW,
@@ -1238,7 +1265,8 @@ private var backgroundTweenSessionId = 0
             val job = coroutineScope.launch {
                 delay(input.delayMs)
                 tween(input.fadeMs) { progress ->
-                    state.curtains[dir] = target.copy(fill = fromFill + (input.fillTo - fromFill) * progress)
+                    val cur = state.curtains[dir] ?: return@tween
+                    state.curtains[dir] = cur.copy(fill = fromFill + (input.fillTo - fromFill) * progress)
                 }
             }
             if (input.block) job.join()
@@ -1248,6 +1276,7 @@ private var backgroundTweenSessionId = 0
     }
 
     override suspend fun setGridBackground(input: GridBackgroundInput) {
+        largeBackgroundTweenSessionId++
         val target = GridBackgroundVisualState(
             imageKeys = input.imageKeys,
             assetKind = input.assetKind ?: "background",
@@ -1265,7 +1294,7 @@ private var backgroundTweenSessionId = 0
         if (input.fadeMs > 0) {
             val job = coroutineScope.launch {
                 tween(input.fadeMs) { progress ->
-                    state.gridBackground = target.copy(alpha = progress)
+                    state.gridBackground = state.gridBackground?.copy(alpha = progress)
                 }
             }
             if (input.block) job.join()
@@ -1427,20 +1456,20 @@ private var backgroundTweenSessionId = 0
     }
 
     override fun setDialogue(
-    speaker: String,
-    text: String,
-    tagStyles: RichTagStyles?,
-    layout: DialogueLayout?
-) {
-    state.dialogue = DialogueVisualState(
-        visible = true,
-        speaker = speaker,
-        text = text,
-        tagStyles = tagStyles ?: state.dialogue.tagStyles,
-        layout = layout ?: state.dialogue.layout,
-        isExpanded = state.dialogue.isExpanded
-    )
-}
+        speaker: String,
+        text: String,
+        tagStyles: RichTagStyles?,
+        layout: DialogueLayout?
+    ) {
+        state.dialogue = DialogueVisualState(
+            visible = true,
+            speaker = speaker,
+            text = text,
+            tagStyles = tagStyles ?: state.dialogue.tagStyles,
+            layout = layout ?: state.dialogue.layout,
+            isExpanded = state.dialogue.isExpanded
+        )
+    }
 
     override fun hideDialogue() {
         state.dialogue = state.dialogue.copy(visible = false)
@@ -1451,6 +1480,7 @@ private var backgroundTweenSessionId = 0
     }
 
     override suspend fun setImage(key: String, input: BackgroundInput?) {
+        imageTweenSessionId++
         val inp = input ?: BackgroundInput()
         val target = BackgroundVisualState(
             textureKey = key,
@@ -1468,7 +1498,7 @@ private var backgroundTweenSessionId = 0
         if (inp.fadeMs > 0) {
             val job = coroutineScope.launch {
                 tween(inp.fadeMs) { progress ->
-                    state.foregroundImage = target.copy(alpha = progress)
+                    state.foregroundImage = state.foregroundImage?.copy(alpha = progress)
                 }
             }
             if (inp.block) job.join()
@@ -1487,30 +1517,38 @@ private var backgroundTweenSessionId = 0
     }
 
     override suspend fun setImageTween(input: ImageTweenInput) {
-    val current = state.foregroundImage ?: return
-    val sessionId = ++imageTweenSessionId
-    val fromX = input.xFrom ?: current.x
-    val toX = input.xTo ?: current.x
-    val fromY = input.yFrom ?: current.y
-    val toY = input.yTo ?: current.y
-    val fromScaleX = input.xScaleFrom ?: current.scaleX
-    val toScaleX = input.xScaleTo ?: current.scaleX
-    val fromScaleY = input.yScaleFrom ?: current.scaleY
-    val toScaleY = input.yScaleTo ?: current.scaleY
+        val current = state.foregroundImage ?: return
+        val sessionId = ++imageTweenSessionId
+        val fromX = input.xFrom ?: current.x
+        val toX = input.xTo ?: current.x
+        val fromY = input.yFrom ?: current.y
+        val toY = input.yTo ?: current.y
+        val fromScaleX = input.xScaleFrom ?: current.scaleX
+        val toScaleX = input.xScaleTo ?: current.scaleX
+        val fromScaleY = input.yScaleFrom ?: current.scaleY
+        val toScaleY = input.yScaleTo ?: current.scaleY
 
-    val job = coroutineScope.launch {
-        tween(input.durationMs, input.ease) { progress ->
-            if (imageTweenSessionId != sessionId) return@tween
-            state.foregroundImage = current.copy(
-                x = fromX + (toX - fromX) * progress,
-                y = fromY + (toY - fromY) * progress,
-                scaleX = fromScaleX + (toScaleX - fromScaleX) * progress,
-                scaleY = fromScaleY + (toScaleY - fromScaleY) * progress
-            )
+        state.foregroundImage = state.foregroundImage?.copy(
+            x = fromX,
+            y = fromY,
+            scaleX = fromScaleX,
+            scaleY = fromScaleY
+        )
+
+        val job = coroutineScope.launch {
+            tween(input.durationMs, input.ease) { progress ->
+                if (imageTweenSessionId != sessionId) return@tween
+                val cur = state.foregroundImage ?: return@tween
+                state.foregroundImage = cur.copy(
+                    x = fromX + (toX - fromX) * progress,
+                    y = fromY + (toY - fromY) * progress,
+                    scaleX = fromScaleX + (toScaleX - fromScaleX) * progress,
+                    scaleY = fromScaleY + (toScaleY - fromScaleY) * progress
+                )
+            }
         }
+        if (input.block && input.durationMs > 0 && !input.loop) job.join()
     }
-    if (input.block && input.durationMs > 0 && !input.loop) job.join()
-}
 
     override suspend fun setInterlude(input: InterludeInput) {
         val channelId = input.channel
@@ -1613,7 +1651,7 @@ private var backgroundTweenSessionId = 0
             val initScaleY = input.scaleFrom?.y ?: existingElem?.scaleY ?: 1f
             val initAlpha = if (input.alphaFrom >= 0f) input.alphaFrom else (existingElem?.alpha ?: 1f)
 
-            var elem = existingElem?.copy(
+            val elem = existingElem?.copy(
                 name = input.name.ifEmpty { existingElem.name },
                 type = input.type,
                 avatarCharacterKey = input.avatarCharacterKey ?: existingElem.avatarCharacterKey,
@@ -1700,6 +1738,7 @@ private var backgroundTweenSessionId = 0
 
     override suspend fun setLargeBackgroundTween(input: LargeBackgroundTweenInput) {
         val current = state.gridBackground ?: return
+        val sessionId = ++largeBackgroundTweenSessionId
         val fromX = input.xFrom ?: current.x
         val toX = input.xTo ?: current.x
         val fromY = input.yFrom ?: current.y
@@ -1709,9 +1748,18 @@ private var backgroundTweenSessionId = 0
         val fromScaleY = input.yScaleFrom ?: current.scaleY
         val toScaleY = input.yScaleTo ?: current.scaleY
 
+        state.gridBackground = state.gridBackground?.copy(
+            x = fromX,
+            y = fromY,
+            scaleX = fromScaleX,
+            scaleY = fromScaleY
+        )
+
         val job = coroutineScope.launch {
             tween(input.durationMs, input.ease ?: "Linear") { progress ->
-                state.gridBackground = current.copy(
+                if (largeBackgroundTweenSessionId != sessionId) return@tween
+                val cur = state.gridBackground ?: return@tween
+                state.gridBackground = cur.copy(
                     x = fromX + (toX - fromX) * progress,
                     y = fromY + (toY - fromY) * progress,
                     scaleX = fromScaleX + (toScaleX - fromScaleX) * progress,
@@ -1739,7 +1787,7 @@ private var backgroundTweenSessionId = 0
         if (input.fadeMs > 0) {
             val job = coroutineScope.launch {
                 tween(input.fadeMs) { progress ->
-                    state.showItem = target.copy(alpha = progress)
+                    state.showItem = state.showItem?.copy(alpha = progress)
                 }
             }
             if (input.block) job.join()
