@@ -3,6 +3,12 @@ package me.voltual.asp.engine
 private val COMMAND_REGEX = Regex("""^\[\s*(?:(.*?)\((.*)\)|(?:([.|\w]*)|(.*)))\s*\]\s*(.*)""")
 private val DIALOGUE_INNER_REGEX = Regex("""^name\s*=\s*"((?:\\.|[^"])*)"$""")
 
+// 匹配 PRTS wiki 页面中的 datas_txt pre 标签块
+private val DATAS_TXT_BLOCK_REGEX = Regex(
+    """<pre[^>]*id=["']datas_txt["'][^>]*>([\s\S]*?)(?:</pre>|$)""",
+    RegexOption.IGNORE_CASE
+)
+
 fun splitArgs(raw: String): List<String> {
     val output = mutableListOf<String>()
     var current = StringBuilder()
@@ -156,19 +162,64 @@ fun parseLine(raw: String, lineNumber: Int = 1): ParsedLine {
 
 data class LogicalLine(val lineNumber: Int, val raw: String)
 
+/**
+ * 预处理并清洗剧本字符串：
+ * 1. 若包含 wiki 的 <pre id="datas_txt"> 标签块，优先精确提取该块内容；
+ * 2. 剥除 HTML 容器标签与后续的 #datas_back / #datas_char 等非剧本数据。
+ */
+private fun sanitizeSourceText(source: String): String {
+    // 1. 若整段源码含有 <pre ... id="datas_txt"> 块，直接提取正文
+    val txtMatch = DATAS_TXT_BLOCK_REGEX.find(source)
+    val textToProcess = if (txtMatch != null) {
+        txtMatch.groupValues[1]
+    } else {
+        source
+    }
+
+    // 2. 如果包含 </pre> 结束标签（或后续 datas_back 块开头），立即在该处截断，防止非剧情配置被当作旁白
+    val preEndIndex = textToProcess.indexOf("</pre>", ignoreCase = true)
+    val truncated = if (preEndIndex != -1) {
+        textToProcess.substring(0, preEndIndex)
+    } else {
+        textToProcess
+    }
+
+    // 3. 去掉可能遗留的下一个 pre 起始标签
+    val nextPreIndex = truncated.indexOf("<pre", ignoreCase = true)
+    return if (nextPreIndex != -1) {
+        truncated.substring(0, nextPreIndex)
+    } else {
+        truncated
+    }
+}
+
 fun logicalLines(source: String): List<LogicalLine> {
-    val physicalLines = source.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    val cleanSource = sanitizeSourceText(source)
+    val physicalLines = cleanSource.replace("\r\n", "\n").replace("\r", "\n").split("\n")
     val output = mutableListOf<LogicalLine>()
 
     var index = 0
     while (index < physicalLines.size) {
         val lineNumber = index + 1
         var raw = physicalLines[index]
+
+        // 剥离可能残留在行首或行尾的 HTML 标签（例如行尾残留的 </pre>，或行首的 <pre ...>）
+        raw = raw.replace(Regex("""</?pre[^>]*>""", RegexOption.IGNORE_CASE), "").trimEnd()
+
         while (raw.endsWith("\\") && index + 1 < physicalLines.size) {
-            raw = raw.dropLast(1) + physicalLines[index + 1]
+            raw = raw.dropLast(1) + physicalLines[index + 1].replace(Regex("""</?pre[^>]*>""", RegexOption.IGNORE_CASE), "").trimEnd()
             index += 1
         }
-        if (raw.isNotEmpty() && !raw.all { it.isWhitespace() } && !raw.trimStart().startsWith("//")) {
+
+        // 过滤空行、注释行以及 HTML 块残留（如 <pre...、<div...）
+        val trimmed = raw.trim()
+        val isHtmlTag = trimmed.startsWith("<pre", ignoreCase = true) ||
+                trimmed.startsWith("</pre", ignoreCase = true) ||
+                trimmed.startsWith("<div", ignoreCase = true) ||
+                trimmed.startsWith("</div", ignoreCase = true) ||
+                trimmed.startsWith("<!--", ignoreCase = true)
+
+        if (raw.isNotEmpty() && !raw.all { it.isWhitespace() } && !raw.trimStart().startsWith("//") && !isHtmlTag) {
             output.add(LogicalLine(lineNumber, raw))
         }
         index += 1
