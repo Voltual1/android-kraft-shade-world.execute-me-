@@ -10,19 +10,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -144,6 +140,8 @@ fun WorldExecuteMeStage(audioPlayer: MvAudioPlayer) {
     val shakeX = if (isHeavyBeat) (sin(sceneState.globalTimeSeconds * 100f) * 12f * sceneState.beatPulse).dp else 0.dp
     val shakeY = if (isHeavyBeat) (cos(sceneState.globalTimeSeconds * 120f) * 12f * sceneState.beatPulse).dp else 0.dp
 
+    val isStoryActive = sceneState.scene == SceneType.OPEN_LOOP_SHUTDOWN && sceneState.localTimeSeconds >= 13.160f
+
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
@@ -254,35 +252,24 @@ fun WorldExecuteMeStage(audioPlayer: MvAudioPlayer) {
             )
         }
 
-        // 最顶层：触控轨迹跟随 Canvas
-        TouchTrailCanvas(
-            onTap = {
-                if (isPlaying) {
-                    audioPlayer.pause()
-                } else {
-                    audioPlayer.play()
-                }
-            },
-            trailColor = when (sceneState.scene) {
-                SceneType.ALGEBRAIC_LOVE -> Color(0xFFFF4081)
-                SceneType.RAPID_EXECUTION_STORM,
-                SceneType.SIMULATION_EXECUTION -> Color(0xFFFF1744)
-                SceneType.CURRENT_CONVERSION -> Color(0xFFFFD600)
-                else -> Color(0xFF00E5FF)
-            },
-            modifier = Modifier.fillMaxSize()
-        )
-
-        // 未播放时的交互提示
-        if (!isPlaying) {
-            Text(
-                text = "TAP SCREEN TO EXECUTE",
-                color = Color.Green.copy(alpha = 0.7f),
-                fontFamily = MvFonts.Terminal,
-                fontSize = 16.sp,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 28.dp)
+        // 最顶层：触控轨迹跟随 Canvas（进入剧情阶段时不渲染，确保剧情屏幕点击正常交互）
+        if (!isStoryActive) {
+            TouchTrailCanvas(
+                onTap = {
+                    if (isPlaying) {
+                        audioPlayer.pause()
+                    } else {
+                        audioPlayer.play()
+                    }
+                },
+                trailColor = when (sceneState.scene) {
+                    SceneType.ALGEBRAIC_LOVE -> Color(0xFFFF4081)
+                    SceneType.RAPID_EXECUTION_STORM,
+                    SceneType.SIMULATION_EXECUTION -> Color(0xFFFF1744)
+                    SceneType.CURRENT_CONVERSION -> Color(0xFFFFD600)
+                    else -> Color(0xFF00E5FF)
+                },
+                modifier = Modifier.fillMaxSize()
             )
         }
     }
