@@ -262,12 +262,12 @@ fun StoryPlayerScreen(
                 }
             }
     ) {
-        // Stage Scale: calculate exact 16:9 1280x720 aspect ratio fitting scale
+        // Stage Scale: change from contain (minOf) to cover (maxOf)
+        // AND align stage bottom to screen bottom so dialogs sit at the bottom of the screen
         val viewWidth = maxWidth
         val viewHeight = maxHeight
-        val scale = minOf(viewWidth / 1280.dp, viewHeight / 720.dp)
+        val scale = maxOf(viewWidth / 1280.dp, viewHeight / 720.dp)
 
-        // 1280x720 Standard Virtual Stage (Scaled to fit the screen proportionally)
         Box(
             modifier = Modifier
                 .requiredSize(1280.dp, 720.dp)
@@ -277,7 +277,7 @@ fun StoryPlayerScreen(
                     scaleY = scale
                     transformOrigin = TransformOrigin(0.5f, 0.5f)
                 }
-                .align(Alignment.Center)
+                .align(Alignment.BottomCenter) // ensure stage bottom aligns with screen bottom
                 .offset {
                     IntOffset(
                         state.camera.shakeX.roundToInt(),
@@ -296,18 +296,6 @@ fun StoryPlayerScreen(
                     }
             ) {
                 // Layer 0: Background Texture (Aligned with PPU & ScreenAdapt)
-                // 交叉淡入淡出时先绘制旧背景，再绘制新背景
-                state.previousBackground?.let { prevBg ->
-                    BackgroundOverlay(
-                        background = prevBg,
-                        context = curContext,
-                        family = StoryAssetFamily.BACKGROUND,
-                        colorFilter = bgFocusColorFilter,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .then(if (bgBlurRadius > 0f) Modifier.blur(bgBlurRadius.dp) else Modifier)
-                    )
-                }
                 BackgroundOverlay(
                     background = state.background,
                     context = curContext,
@@ -342,19 +330,6 @@ fun StoryPlayerScreen(
                 )
 
                 // Layer 1: Foreground Images (Aligned with PPU, ScreenAdapt & Rotation)
-                // 交叉淡入淡出时先绘制旧前景，再绘制新前景
-                state.previousForegroundImage?.let { prevFg ->
-                    BackgroundOverlay(
-                        background = prevFg,
-                        context = curContext,
-                        family = StoryAssetFamily.IMAGE,
-                        rotationDeg = curRenderer.state.imageRotationDeg,
-                        colorFilter = cgFocusColorFilter,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .then(if (cgBlurRadius > 0f) Modifier.blur(cgBlurRadius.dp) else Modifier)
-                    )
-                }
                 BackgroundOverlay(
                     background = state.foregroundImage,
                     context = curContext,
