@@ -7,6 +7,7 @@ import android.graphics.Rect
 import android.util.LruCache
 import coil3.ImageLoader
 import coil3.request.ImageRequest
+import coil3.request.allowHardware
 import coil3.request.SuccessResult
 import coil3.toBitmap
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +42,14 @@ object FaceOverlayBaker {
     private val memoryCache = object : LruCache<String, Bitmap>(32) {
         override fun entryRemoved(evicted: Boolean, key: String?, oldValue: Bitmap?, newValue: Bitmap?) {
             // Let GC handle bitmap recycling safely
+        }
+    }
+
+    private fun Bitmap.toSoftwareBitmap(): Bitmap {
+        return if (config == Bitmap.Config.HARDWARE) {
+            copy(Bitmap.Config.ARGB_8888, false) ?: this
+        } else {
+            this
         }
     }
 
@@ -88,15 +97,21 @@ object FaceOverlayBaker {
                 val faceUrl = resolveStoryCharacterAssetByKey(item.face) ?: return@withContext null
 
                 val imageLoader = ImageLoader(androidContext)
-                val baseRequest = ImageRequest.Builder(androidContext).data(baseUrl).build()
-                val faceRequest = ImageRequest.Builder(androidContext).data(faceUrl).build()
+                val baseRequest = ImageRequest.Builder(androidContext)
+                    .data(baseUrl)
+                    .allowHardware(false)
+                    .build()
+                val faceRequest = ImageRequest.Builder(androidContext)
+                    .data(faceUrl)
+                    .allowHardware(false)
+                    .build()
 
                 val baseResult = imageLoader.execute(baseRequest)
                 val faceResult = imageLoader.execute(faceRequest)
 
                 if (baseResult is SuccessResult && faceResult is SuccessResult) {
-                    val baseBmp = baseResult.image.toBitmap()
-                    val faceBmp = faceResult.image.toBitmap()
+                    val baseBmp = baseResult.image.toBitmap().toSoftwareBitmap()
+                    val faceBmp = faceResult.image.toBitmap().toSoftwareBitmap()
 
                     val baked = Bitmap.createBitmap(baseBmp.width, baseBmp.height, Bitmap.Config.ARGB_8888)
                     val canvas = Canvas(baked)
