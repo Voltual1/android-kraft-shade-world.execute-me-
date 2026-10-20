@@ -72,6 +72,9 @@ class ComposeStoryRenderer(
     private var backgroundTweenSessionId = 0
     private var largeBackgroundTweenSessionId = 0
 
+    private val backgroundFadeJobs = mutableListOf<Job>()
+    private val foregroundFadeJobs = mutableListOf<Job>()
+
     private var activeShakeJob: Job? = null
     private var pendingDecisionDeferred: CompletableDeferred<DecisionSelection>? = null
     private var activeVideoDeferred: CompletableDeferred<Unit>? = null
@@ -267,22 +270,196 @@ class ComposeStoryRenderer(
         state.focus = state.focus.copy(amounts = amounts)
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // 背景与前景交叉淡入淡出实现
+    // ─────────────────────────────────────────────────────────────
+
+    private fun cancelBackgroundFadeJobs() {
+        backgroundFadeJobs.forEach { it.cancel() }
+        backgroundFadeJobs.clear()
+    }
+
+    private fun cancelForegroundFadeJobs() {
+        foregroundFadeJobs.forEach { it.cancel() }
+        foregroundFadeJobs.clear()
+    }
+
+    override suspend fun setBackground(key: String, input: BackgroundInput?) {
+        backgroundTweenSessionId++
+        cancelBackgroundFadeJobs()
+
+        val inp = input ?: BackgroundInput()
+        val current = state.background
+        // 当存在旧背景且需要淡入时，将旧背景保存为 previousBackground，以便 UI 同时渲染新旧两层
+        if (current != null && inp.fadeMs > 0) {
+            state.previousBackground = current
+        } else {
+            state.previousBackground = null
+        }
+
+        val target = BackgroundVisualState(
+            textureKey = key,
+            alpha = if (inp.fadeMs > 0) 0f else 1f,
+            scaleX = inp.scaleX,
+            scaleY = inp.scaleY,
+            x = inp.x,
+            y = inp.y,
+            widthMultiplier = inp.width ?: 1f,
+            heightMultiplier = inp.height ?: 1f,
+            tiled = inp.tiled,
+            screenAdapt = inp.screenAdapt
+        )
+        state.background = target
+
+        if (inp.fadeMs > 0) {
+            val fadeJob = coroutineScope.launch {
+                tween(inp.fadeMs) { progress ->
+                    state.background = state.background?.copy(alpha = progress)
+                }
+                // 淡入完成后移除旧背景
+                state.previousBackground = null
+            }
+            backgroundFadeJobs.add(fadeJob)
+            fadeJob.invokeOnCompletion { backgroundFadeJobs.remove(fadeJob) }
+            if (inp.block) fadeJob.join()
+        }
+    }
+
     override suspend fun clearBackground(fadeMs: Long, block: Boolean) {
         backgroundTweenSessionId++
-        val current = state.background ?: return
+        cancelBackgroundFadeJobs()
+
+        val current = state.background
+        val previous = state.previousBackground
+
         if (fadeMs <= 0) {
             state.background = null
+            state.previousBackground = null
             return
         }
-        val job = coroutineScope.launch {
+
+        // 同时淡出当前背景和可能存在的旧背景
+        val jobs = mutableListOf<Job>()
+        if (current != null) {
             val startAlpha = current.alpha
-            tween(fadeMs) { progress ->
-                state.background = state.background?.copy(alpha = startAlpha * (1f - progress))
+            val job = coroutineScope.launch {
+                tween(fadeMs) { progress ->
+                    state.background = state.background?.copy(alpha = startAlpha * (1f - progress))
+                }
+                state.background = null
             }
-            state.background = null
+            jobs.add(job)
+            backgroundFadeJobs.add(job)
         }
-        if (block) job.join()
+        if (previous != null) {
+            val startAlpha = previous.alpha
+            val job = coroutineScope.launch {
+                tween(fadeMs) { progress ->
+                    state.previousBackground = state.previousBackground?.copy(alpha = startAlpha * (1f - progress))
+                }
+                state.previousBackground = null
+            }
+            jobs.add(job)
+            backgroundFadeJobs.add(job)
+        }
+
+        if (block && jobs.isNotEmpty()) {
+            jobs.joinAll()
+        } else {
+            jobs.forEach { job ->
+                job.invokeOnCompletion { backgroundFadeJobs.remove(job) }
+            }
+        }
     }
+
+    override suspend fun setImage(key: String, input: BackgroundInput?) {
+        imageTweenSessionId++
+        cancelForegroundFadeJobs()
+
+        val inp = input ?: BackgroundInput()
+        val current = state.foregroundImage
+        if (current != null && inp.fadeMs > 0) {
+            state.previousForegroundImage = current
+        } else {
+            state.previousForegroundImage = null
+        }
+
+        val target = BackgroundVisualState(
+            textureKey = key,
+            alpha = if (inp.fadeMs > 0) 0f else 1f,
+            scaleX = inp.scaleX,
+            scaleY = inp.scaleY,
+            x = inp.x,
+            y = inp.y,
+            widthMultiplier = inp.width ?: 1f,
+            heightMultiplier = inp.height ?: 1f,
+            tiled = inp.tiled,
+            screenAdapt = inp.screenAdapt
+        )
+        state.foregroundImage = target
+
+        if (inp.fadeMs > 0) {
+            val fadeJob = coroutineScope.launch {
+                tween(inp.fadeMs) { progress ->
+                    state.foregroundImage = state.foregroundImage?.copy(alpha = progress)
+                }
+                state.previousForegroundImage = null
+            }
+            foregroundFadeJobs.add(fadeJob)
+            fadeJob.invokeOnCompletion { foregroundFadeJobs.remove(fadeJob) }
+            if (inp.block) fadeJob.join()
+        }
+    }
+
+    override suspend fun clearImage(fadeMs: Long, block: Boolean) {
+        imageTweenSessionId++
+        cancelForegroundFadeJobs()
+
+        val current = state.foregroundImage
+        val previous = state.previousForegroundImage
+
+        if (fadeMs <= 0) {
+            state.foregroundImage = null
+            state.previousForegroundImage = null
+            return
+        }
+
+        val jobs = mutableListOf<Job>()
+        if (current != null) {
+            val startAlpha = current.alpha
+            val job = coroutineScope.launch {
+                tween(fadeMs) { progress ->
+                    state.foregroundImage = state.foregroundImage?.copy(alpha = startAlpha * (1f - progress))
+                }
+                state.foregroundImage = null
+            }
+            jobs.add(job)
+            foregroundFadeJobs.add(job)
+        }
+        if (previous != null) {
+            val startAlpha = previous.alpha
+            val job = coroutineScope.launch {
+                tween(fadeMs) { progress ->
+                    state.previousForegroundImage = state.previousForegroundImage?.copy(alpha = startAlpha * (1f - progress))
+                }
+                state.previousForegroundImage = null
+            }
+            jobs.add(job)
+            foregroundFadeJobs.add(job)
+        }
+
+        if (block && jobs.isNotEmpty()) {
+            jobs.joinAll()
+        } else {
+            jobs.forEach { job ->
+                job.invokeOnCompletion { foregroundFadeJobs.remove(job) }
+            }
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 原有其余方法保持不变（未改动）
+    // ─────────────────────────────────────────────────────────────
 
     override suspend fun clearCharacters(slot: String?, fadeMs: Long) {
         if (slot != null) {
@@ -350,23 +527,6 @@ class ComposeStoryRenderer(
                 state.gridBackground = state.gridBackground?.copy(alpha = startAlpha * (1f - progress))
             }
             state.gridBackground = null
-        }
-        if (block) job.join()
-    }
-
-    override suspend fun clearImage(fadeMs: Long, block: Boolean) {
-        imageTweenSessionId++
-        val current = state.foregroundImage ?: return
-        if (fadeMs <= 0) {
-            state.foregroundImage = null
-            return
-        }
-        val job = coroutineScope.launch {
-            val startAlpha = current.alpha
-            tween(fadeMs) { progress ->
-                state.foregroundImage = state.foregroundImage?.copy(alpha = startAlpha * (1f - progress))
-            }
-            state.foregroundImage = null
         }
         if (block) job.join()
     }
@@ -550,6 +710,10 @@ class ComposeStoryRenderer(
         timerFadeJob = null
         avgDisplayJobs.values.forEach { it.cancel() }
         avgDisplayJobs.clear()
+        backgroundFadeJobs.forEach { it.cancel() }
+        backgroundFadeJobs.clear()
+        foregroundFadeJobs.forEach { it.cancel() }
+        foregroundFadeJobs.clear()
         state.dialogue = DialogueVisualState(visible = false)
         state.decision = DecisionVisualState(visible = false)
         state.video = VideoVisualState(visible = false)
@@ -563,6 +727,10 @@ class ComposeStoryRenderer(
         state.stickers.clear()
         state.avgDisplays.clear()
         state.timerSticker = TimerVisualState(visible = false)
+        state.background = null
+        state.previousBackground = null
+        state.foregroundImage = null
+        state.previousForegroundImage = null
     }
 
     override fun finishTextTyping(): Boolean {
@@ -727,32 +895,6 @@ class ComposeStoryRenderer(
                 scaleY = if (supportsScale) endScaleY else item.scaleY,
                 alpha = if (supportsFade) targetAlpha else item.alpha
             )
-        }
-    }
-
-    override suspend fun setBackground(key: String, input: BackgroundInput?) {
-        backgroundTweenSessionId++
-        val inp = input ?: BackgroundInput()
-        val target = BackgroundVisualState(
-            textureKey = key,
-            alpha = if (inp.fadeMs > 0) 0f else 1f,
-            scaleX = inp.scaleX,
-            scaleY = inp.scaleY,
-            x = inp.x,
-            y = inp.y,
-            widthMultiplier = inp.width ?: 1f,
-            heightMultiplier = inp.height ?: 1f,
-            tiled = inp.tiled,
-            screenAdapt = inp.screenAdapt
-        )
-        state.background = target
-        if (inp.fadeMs > 0) {
-            val job = coroutineScope.launch {
-                tween(inp.fadeMs) { progress ->
-                    state.background = state.background?.copy(alpha = progress)
-                }
-            }
-            if (inp.block) job.join()
         }
     }
 
@@ -1130,6 +1272,7 @@ class ComposeStoryRenderer(
     }
 
     override suspend fun setCharacterCutin(input: CharacterCutinInput) {
+        // 保持原有实现不变（若需要交叉淡化可后续补充）
         val widgetId = input.widgetId
         val existing = state.cutinSlots[widgetId]
         val fadeStyle = input.fadeStyle ?: existing?.fadeStyle ?: "fade"
@@ -1522,32 +1665,6 @@ class ComposeStoryRenderer(
 
     override fun finishDialogueCommand() {
         state.dialogue = state.dialogue.copy(isExpanded = false)
-    }
-
-    override suspend fun setImage(key: String, input: BackgroundInput?) {
-        imageTweenSessionId++
-        val inp = input ?: BackgroundInput()
-        val target = BackgroundVisualState(
-            textureKey = key,
-            alpha = if (inp.fadeMs > 0) 0f else 1f,
-            scaleX = inp.scaleX,
-            scaleY = inp.scaleY,
-            x = inp.x,
-            y = inp.y,
-            widthMultiplier = inp.width ?: 1f,
-            heightMultiplier = inp.height ?: 1f,
-            tiled = inp.tiled,
-            screenAdapt = inp.screenAdapt
-        )
-        state.foregroundImage = target
-        if (inp.fadeMs > 0) {
-            val job = coroutineScope.launch {
-                tween(inp.fadeMs) { progress ->
-                    state.foregroundImage = state.foregroundImage?.copy(alpha = progress)
-                }
-            }
-            if (inp.block) job.join()
-        }
     }
 
     override suspend fun setImageRotate(input: ImageRotateInput) {

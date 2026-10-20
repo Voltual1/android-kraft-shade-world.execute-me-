@@ -296,6 +296,18 @@ fun StoryPlayerScreen(
                     }
             ) {
                 // Layer 0: Background Texture (Aligned with PPU & ScreenAdapt)
+                // 交叉淡入淡出时先绘制旧背景，再绘制新背景
+                state.previousBackground?.let { prevBg ->
+                    BackgroundOverlay(
+                        background = prevBg,
+                        context = curContext,
+                        family = StoryAssetFamily.BACKGROUND,
+                        colorFilter = bgFocusColorFilter,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .then(if (bgBlurRadius > 0f) Modifier.blur(bgBlurRadius.dp) else Modifier)
+                    )
+                }
                 BackgroundOverlay(
                     background = state.background,
                     context = curContext,
@@ -330,6 +342,19 @@ fun StoryPlayerScreen(
                 )
 
                 // Layer 1: Foreground Images (Aligned with PPU, ScreenAdapt & Rotation)
+                // 交叉淡入淡出时先绘制旧前景，再绘制新前景
+                state.previousForegroundImage?.let { prevFg ->
+                    BackgroundOverlay(
+                        background = prevFg,
+                        context = curContext,
+                        family = StoryAssetFamily.IMAGE,
+                        rotationDeg = curRenderer.state.imageRotationDeg,
+                        colorFilter = cgFocusColorFilter,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .then(if (cgBlurRadius > 0f) Modifier.blur(cgBlurRadius.dp) else Modifier)
+                    )
+                }
                 BackgroundOverlay(
                     background = state.foregroundImage,
                     context = curContext,

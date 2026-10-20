@@ -265,7 +265,11 @@ data class AvgDisplayVisualItem(
 
 class StoryRendererState {
     var background by mutableStateOf<BackgroundVisualState?>(null)
+    var previousBackground by mutableStateOf<BackgroundVisualState?>(null)
+
     var foregroundImage by mutableStateOf<BackgroundVisualState?>(null)
+    var previousForegroundImage by mutableStateOf<BackgroundVisualState?>(null)
+
     var imageRotationDeg by mutableStateOf(0f)
     var gridBackground by mutableStateOf<GridBackgroundVisualState?>(null)
     val characters = mutableStateMapOf<String, CharacterVisualSlot>()
