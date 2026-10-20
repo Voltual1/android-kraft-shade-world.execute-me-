@@ -40,6 +40,7 @@ import kotlin.math.roundToInt
 fun StoryPlayerScreen(
     scriptText: String,
     initialContext: Context? = null,
+    showPreloadProgress: Boolean = false,
     modifier: Modifier = Modifier,
     onFinished: () -> Unit = {}
 ) {
@@ -138,7 +139,7 @@ fun StoryPlayerScreen(
                         fontSize = 14.sp
                     )
                 }
-            } else {
+            } else if (showPreloadProgress) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp)
