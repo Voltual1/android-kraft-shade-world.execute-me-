@@ -43,7 +43,7 @@ fun ShutdownStage(
     // 预加载本地故事剧本资源
     LaunchedEffect(Unit) {
         try {
-            val (text, ctx) = loadContextFromAssets(androidContext, "story/birthday_mousse")
+            val (text, ctx) = loadContextFromAssets(androidContext, "story/Sweetheart")
             scriptText = text
             storyContext = ctx
         } catch (_: Throwable) {
