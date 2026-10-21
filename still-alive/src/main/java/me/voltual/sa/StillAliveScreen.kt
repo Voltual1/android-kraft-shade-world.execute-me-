@@ -3,6 +3,7 @@ package me.voltual.sa
 import androidx.annotation.RawRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
@@ -18,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle as ComposeTextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -89,21 +91,46 @@ public fun StillAliveScreen(
 		}
 	}
 
-	// Render retro terminal output to screen with Monospace font
-	Box(
+	// 横屏自适应计算：80 列 x 24 行终端
+	BoxWithConstraints(
 		modifier = modifier
 			.fillMaxSize()
 			.background(Color.Black)
-			.padding(16.dp),
+			.padding(8.dp),
 		contentAlignment = Alignment.Center,
 	) {
-		Text(
-			text = renderedTerminalText,
-			color = Color(0xFFFFB000), // Amber Yellow
-			fontFamily = FontFamily.Monospace,
-			fontWeight = FontWeight.Bold,
-			fontSize = 12.sp,
-			lineHeight = 14.sp,
-		)
+		// 终端字符维度: 80 列 x 24 行
+		val columns = 80f
+		val rows = 24f
+
+		// 等宽英文字符宽高比通常约为 0.60
+		val charAspectRatio = 0.60f
+
+		// 保证 80 列塞进 maxWidth 的最大字体大小 (fontSize ≈ width / (columns * 0.6))
+		val maxFontSizeFromWidth = (maxWidth.value / (columns * charAspectRatio))
+
+		// 保证 24 行塞进 maxHeight 的最大字体大小 (行高通常为 1.15 * fontSize)
+		val lineSpacingRatio = 1.15f
+		val maxFontSizeFromHeight = (maxHeight.value / (rows * lineSpacingRatio))
+
+		// 选取两者的最小值，避免横向被切或纵向溢出
+		val dynamicFontSize = minOf(maxFontSizeFromWidth, maxFontSizeFromHeight).coerceAtLeast(6f)
+		val dynamicLineHeight = dynamicFontSize * lineSpacingRatio
+
+		Box(
+			contentAlignment = Alignment.Center,
+		) {
+			Text(
+				text = renderedTerminalText,
+				style = ComposeTextStyle(
+					color = Color(0xFFFFB000), // VT241 经典琥珀黄
+					fontFamily = FontFamily.Monospace,
+					fontWeight = FontWeight.Bold,
+					fontSize = dynamicFontSize.sp,
+					lineHeight = dynamicLineHeight.sp,
+				),
+				softWrap = false,
+			)
+		}
 	}
 }
