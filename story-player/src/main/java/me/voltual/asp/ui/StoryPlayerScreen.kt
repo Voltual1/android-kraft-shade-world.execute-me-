@@ -262,12 +262,12 @@ fun StoryPlayerScreen(
                 }
             }
     ) {
-        // Stage Scale: change from contain (minOf) to cover (maxOf)
-        // AND align stage bottom to screen bottom so dialogs sit at the bottom of the screen
         val viewWidth = maxWidth
         val viewHeight = maxHeight
-        val scale = maxOf(viewWidth / 1280.dp, viewHeight / 720.dp)
+        // 保持 16:9 比例完整画面，绝不裁切任何画面内容
+        val scale = minOf(viewWidth / 1280.dp, viewHeight / 720.dp)
 
+        // 1280x720 视觉虚拟舞台容器（保持 16:9 居中显示）
         Box(
             modifier = Modifier
                 .requiredSize(1280.dp, 720.dp)
@@ -277,7 +277,7 @@ fun StoryPlayerScreen(
                     scaleY = scale
                     transformOrigin = TransformOrigin(0.5f, 0.5f)
                 }
-                .align(Alignment.BottomCenter) // ensure stage bottom aligns with screen bottom
+                .align(Alignment.Center)
                 .offset {
                     IntOffset(
                         state.camera.shakeX.roundToInt(),
@@ -296,6 +296,17 @@ fun StoryPlayerScreen(
                     }
             ) {
                 // Layer 0: Background Texture (Aligned with PPU & ScreenAdapt)
+                state.previousBackground?.let { prevBg ->
+                    BackgroundOverlay(
+                        background = prevBg,
+                        context = curContext,
+                        family = StoryAssetFamily.BACKGROUND,
+                        colorFilter = bgFocusColorFilter,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .then(if (bgBlurRadius > 0f) Modifier.blur(bgBlurRadius.dp) else Modifier)
+                    )
+                }
                 BackgroundOverlay(
                     background = state.background,
                     context = curContext,
@@ -330,6 +341,18 @@ fun StoryPlayerScreen(
                 )
 
                 // Layer 1: Foreground Images (Aligned with PPU, ScreenAdapt & Rotation)
+                state.previousForegroundImage?.let { prevFg ->
+                    BackgroundOverlay(
+                        background = prevFg,
+                        context = curContext,
+                        family = StoryAssetFamily.IMAGE,
+                        rotationDeg = curRenderer.state.imageRotationDeg,
+                        colorFilter = cgFocusColorFilter,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .then(if (cgBlurRadius > 0f) Modifier.blur(cgBlurRadius.dp) else Modifier)
+                    )
+                }
                 BackgroundOverlay(
                     background = state.foregroundImage,
                     context = curContext,
@@ -466,24 +489,25 @@ fun StoryPlayerScreen(
                 timer = state.timerSticker,
                 modifier = Modifier.fillMaxSize()
             )
-
-            // Layer 10: Dialogue Box
-            DialogueBox(
-                dialogue = state.dialogue,
-                modifier = Modifier.fillMaxSize()
-            )
-
-            // Layer 11: Decision Overlay
-            DecisionOverlay(
-                decision = state.decision,
-                modifier = Modifier.fillMaxSize()
-            )
-
-            // Layer 11.5: Video Player Overlay (全屏置顶播放)
-            VideoPlayerOverlay(
-                video = state.video,
-                modifier = Modifier.fillMaxSize()
-            )
         }
+
+        // Layer 10: Dialogue Box（脱离 1280x720 视口限制，直接贴在屏幕最底部）
+        DialogueBox(
+            dialogue = state.dialogue,
+            scale = scale,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // Layer 11: Decision Overlay（全屏遮罩覆盖）
+        DecisionOverlay(
+            decision = state.decision,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // Layer 11.5: Video Player Overlay (全屏置顶播放)
+        VideoPlayerOverlay(
+            video = state.video,
+            modifier = Modifier.fillMaxSize()
+        )
     }
 }

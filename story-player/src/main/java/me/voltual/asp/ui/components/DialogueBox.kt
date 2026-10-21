@@ -12,6 +12,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -28,7 +30,6 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import me.voltual.asp.R
-import me.voltual.asp.engine.STORY_HEIGHT
 import me.voltual.asp.engine.STORY_WIDTH
 import me.voltual.asp.engine.rendering.DialogueVisualState
 import kotlin.math.max
@@ -102,6 +103,7 @@ private fun parseTaggedTextToAnnotated(text: String): AnnotatedString {
 @Composable
 fun DialogueBox(
     dialogue: DialogueVisualState,
+    scale: Float = 1f,
     modifier: Modifier = Modifier
 ) {
     val animatedAlpha by animateFloatAsState(
@@ -116,9 +118,9 @@ fun DialogueBox(
     val density = LocalDensity.current
 
     var currentSpeakerFontSize by remember { mutableIntStateOf(NAME_FONT_MAX) }
-    var currentSpeakerY by remember { mutableFloatStateOf(STORY_HEIGHT - BOTTOM_HEIGHT + NAME_TOP) }
+    var currentSpeakerYInBox by remember { mutableFloatStateOf(NAME_TOP) }
     var currentMessageX by remember { mutableFloatStateOf(STORY_WIDTH * MESSAGE_ANCHOR_X + MESSAGE_LEFT) }
-    var currentMessageY by remember { mutableFloatStateOf(STORY_HEIGHT - MESSAGE_TOP) }
+    var currentMessageYInBox by remember { mutableFloatStateOf(BOTTOM_HEIGHT - MESSAGE_TOP) }
     var isMessageWidthExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(dialogue.layout, dialogue.speaker) {
@@ -157,7 +159,7 @@ fun DialogueBox(
         } else {
             0f
         }
-        currentSpeakerY = (STORY_HEIGHT - BOTTOM_HEIGHT + NAME_TOP) - max(0f, speakerMeasureHeight - NAME_MAX_HEIGHT)
+        currentSpeakerYInBox = NAME_TOP - max(0f, speakerMeasureHeight - NAME_MAX_HEIGHT)
 
         val layout = dialogue.layout
         if (layout != null) {
@@ -199,7 +201,7 @@ fun DialogueBox(
                 isMessageWidthExpanded = false
             }
 
-            currentMessageY = (STORY_HEIGHT - MESSAGE_TOP) - max(0f, finalHeightDp - MESSAGE_MAX_HEIGHT)
+            currentMessageYInBox = (BOTTOM_HEIGHT - MESSAGE_TOP) - max(0f, finalHeightDp - MESSAGE_MAX_HEIGHT)
         }
     }
 
@@ -211,13 +213,12 @@ fun DialogueBox(
 
     val activeWordWrapWidth = if (isMessageWidthExpanded) MESSAGE_WIDTH + 24f else MESSAGE_WIDTH
 
-    // 直接在 1280x720 的舞台容器中绝对定位各个图层与文字
     Box(
         modifier = modifier
             .fillMaxSize()
             .alpha(animatedAlpha.coerceIn(0f, 1f))
     ) {
-        // 顶部阴影渐变条 (高 102dp，倒置)
+        // 顶部阴影渐变条：紧贴物理屏幕最上方
         Image(
             painter = painterResource(id = R.drawable.sprite_avg_cutscene),
             contentDescription = null,
@@ -226,48 +227,72 @@ fun DialogueBox(
                 .fillMaxWidth()
                 .height(102.dp)
                 .align(Alignment.TopCenter)
+                .graphicsLayer {
+                    scaleX = 1f
+                    scaleY = scale
+                    transformOrigin = TransformOrigin(0.5f, 0f)
+                }
                 .scale(scaleX = 1f, scaleY = -1f)
                 .alpha(0.7059f)
         )
 
-        // 底部对话框暗色框架 (高 182dp，位于 720 - 182 = 538dp)
-        Image(
-            painter = painterResource(id = R.drawable.sprite_avg_cutscene),
-            contentDescription = null,
-            contentScale = ContentScale.FillBounds,
+        // 底部对话框整体容器：锚定屏幕最底部
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(BOTTOM_HEIGHT.dp)
                 .align(Alignment.BottomCenter)
-        )
-
-        // 说话人名称：按舞台全局绝对坐标 (NAME_LEFT, currentSpeakerY) 排版，右对齐
-        if (dialogue.speaker.isNotEmpty()) {
-            Text(
-                text = dialogue.speaker,
-                color = Color(0xFF929292),
-                fontSize = currentSpeakerFontSize.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.SansSerif,
-                textAlign = TextAlign.End,
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    transformOrigin = TransformOrigin(0.5f, 1f)
+                }
+        ) {
+            // 底部暗色底框背景条：宽度横向铺满，高度固定 182dp
+            Image(
+                painter = painterResource(id = R.drawable.sprite_avg_cutscene),
+                contentDescription = null,
+                contentScale = ContentScale.FillBounds,
                 modifier = Modifier
-                    .offset(x = NAME_LEFT.dp, y = currentSpeakerY.dp)
-                    .width(NAME_WIDTH.dp)
+                    .requiredWidth(maxOf(1280.dp, (1280f / scale.coerceAtLeast(0.01f)).dp))
+                    .height(BOTTOM_HEIGHT.dp)
+                    .align(Alignment.BottomCenter)
             )
-        }
 
-        // 对白正文：按舞台全局绝对坐标 (currentMessageX, currentMessageY) 排版
-        val messageAnnotated = parseTaggedTextToAnnotated(dialogue.text)
-        Text(
-            text = messageAnnotated,
-            color = Color.White,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Medium,
-            fontFamily = FontFamily.SansSerif,
-            lineHeight = 32.sp,
-            modifier = Modifier
-                .offset(x = currentMessageX.dp, y = currentMessageY.dp)
-                .width(activeWordWrapWidth.dp)
-        )
+            // 文字内容容器：保持 1280dp 舞台宽度居中对齐排版
+            Box(
+                modifier = Modifier
+                    .requiredSize(1280.dp, BOTTOM_HEIGHT.dp)
+                    .align(Alignment.BottomCenter)
+            ) {
+                // 说话人名称
+                if (dialogue.speaker.isNotEmpty()) {
+                    Text(
+                        text = dialogue.speaker,
+                        color = Color(0xFF929292),
+                        fontSize = currentSpeakerFontSize.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.SansSerif,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier
+                            .offset(x = NAME_LEFT.dp, y = currentSpeakerYInBox.dp)
+                            .width(NAME_WIDTH.dp)
+                    )
+                }
+
+                // 对白正文
+                val messageAnnotated = parseTaggedTextToAnnotated(dialogue.text)
+                Text(
+                    text = messageAnnotated,
+                    color = Color.White,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Medium,
+                    fontFamily = FontFamily.SansSerif,
+                    lineHeight = 32.sp,
+                    modifier = Modifier
+                        .offset(x = currentMessageX.dp, y = currentMessageYInBox.dp)
+                        .width(activeWordWrapWidth.dp)
+                )
+            }
+        }
     }
 }
