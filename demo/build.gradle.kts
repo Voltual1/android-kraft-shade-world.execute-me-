@@ -104,4 +104,7 @@ dependencies {
     
     // Story Player 模块
     implementation(project(":story-player"))
+
+    // Still Alive 终端动画模块
+    implementation(project(":still-alive"))
 }
