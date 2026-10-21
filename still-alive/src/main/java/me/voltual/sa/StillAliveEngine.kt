@@ -23,6 +23,9 @@ public class StillAliveEngine(
 	public var creditsTextBuffer: List<String> by mutableStateOf(emptyList())
 		private set
 
+	public var isFinished: Boolean by mutableStateOf(false)
+		private set
+
 	private var creditsStarted = false
 	private var timelineJob: Job? = null
 	private var creditsJob: Job? = null
@@ -34,6 +37,7 @@ public class StillAliveEngine(
 		currentAsciiIndex = 0
 		creditsStarted = false
 		creditsTextBuffer = emptyList()
+		isFinished = false
 
 		timelineJob = scope.launch {
 			val lyrics = StillAliveData.rawLyrics
@@ -104,8 +108,8 @@ public class StillAliveEngine(
 					startCreditsScroll()
 				}
 			}
-			9 -> { // End
-				// Sequence complete
+			9 -> { // End of song and animation
+				isFinished = true
 			}
 		}
 	}
@@ -151,5 +155,6 @@ public class StillAliveEngine(
 		creditsJob?.cancel()
 		timelineJob = null
 		creditsJob = null
+		isFinished = false
 	}
 }
