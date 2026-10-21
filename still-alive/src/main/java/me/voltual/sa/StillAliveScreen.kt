@@ -1,14 +1,10 @@
 package me.voltual.sa
 
-import android.os.Bundle
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
+import androidx.annotation.RawRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -27,41 +23,29 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.MediaItem
+import androidx.media3.datasource.RawResourceDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import com.jakewharton.mosaic.Mosaic
-import com.jakewharton.mosaic.testing.TestTerminal
-
-public class MainActivity : ComponentActivity() {
-	override fun onCreate(savedInstanceState: Bundle?) {
-		super.onCreate(savedInstanceState)
-		setContent {
-			MaterialTheme {
-				Surface(
-					modifier = Modifier.fillMaxSize(),
-					color = Color.Black,
-				) {
-					StillAliveScreen()
-				}
-			}
-		}
-	}
-}
 
 @Composable
-public fun StillAliveScreen() {
+public fun StillAliveScreen(
+	modifier: Modifier = Modifier,
+	@RawRes rawAudioResId: Int = R.raw.sa1,
+) {
 	val context = LocalContext.current
 	val scope = rememberCoroutineScope()
 
-	// Initialize Media3 ExoPlayer for sa1.mp3
-	val exoPlayer = remember {
+	// Initialize Media3 ExoPlayer for raw resource audio
+	val exoPlayer = remember(rawAudioResId) {
 		ExoPlayer.Builder(context).build().apply {
-			val mediaItem = MediaItem.fromUri("asset:///music/sa1.mp3")
+			val uri = RawResourceDataSource.buildRawResourceUri(rawAudioResId)
+			val mediaItem = MediaItem.fromUri(uri)
 			setMediaItem(mediaItem)
 			prepare()
 		}
 	}
 
-	DisposableEffect(Unit) {
+	DisposableEffect(exoPlayer) {
 		onDispose {
 			exoPlayer.release()
 		}
@@ -87,11 +71,11 @@ public fun StillAliveScreen() {
 					supportsKittyUnderlines = false,
 				)
 			},
-			terminal = TestTerminal(),
+			terminal = VirtualTerminal(),
 		)
 	}
 
-	LaunchedEffect(Unit) {
+	LaunchedEffect(engine) {
 		mosaic.setContent {
 			StillAliveTerminalUI(engine = engine)
 		}
@@ -107,7 +91,7 @@ public fun StillAliveScreen() {
 
 	// Render retro terminal output to screen with Monospace font
 	Box(
-		modifier = Modifier
+		modifier = modifier
 			.fillMaxSize()
 			.background(Color.Black)
 			.padding(16.dp),
