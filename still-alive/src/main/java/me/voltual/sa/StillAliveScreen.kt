@@ -32,7 +32,7 @@ import com.jakewharton.mosaic.Mosaic
 @Composable
 public fun StillAliveScreen(
 	modifier: Modifier = Modifier,
-	@RawRes rawAudioResId: Int = R.raw.sa1,
+	@RawRes rawAudioResId: Int = R.raw.R.raw.mili_still_alive,
 ) {
 	val context = LocalContext.current
 	val scope = rememberCoroutineScope()
