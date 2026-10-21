@@ -33,7 +33,7 @@ import androidx.compose.ui.unit.sp
 import androidx.media3.common.MediaItem
 import androidx.media3.datasource.RawResourceDataSource
 import androidx.media3.exoplayer.ExoPlayer
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 import com.jakewharton.mosaic.Mosaic
 
 @Composable
