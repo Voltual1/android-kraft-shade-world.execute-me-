@@ -39,7 +39,7 @@ import com.jakewharton.mosaic.Mosaic
 @Composable
 public fun StillAliveScreen(
 	modifier: Modifier = Modifier,
-	@RawRes rawAudioResId: Int = R.raw.sa1,
+	@RawRes rawAudioResId: Int = R.raw.mili_still_alive,
 	@DrawableRes cakeDrawableResId: Int = R.drawable.cake,
 ) {
 	val context = LocalContext.current
