@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import com.cardinalblue.kraftshade.compose.KraftShadeEffectView
 import com.cardinalblue.kraftshade.compose.rememberKraftShadeEffectState
+import me.voltual.sa.StillAliveScreen
 import me.voltual.asp.Context as StoryContext
 import me.voltual.asp.loadContextFromAssets
 import me.voltual.asp.ui.StoryPlayerScreen
@@ -36,6 +37,9 @@ fun ShutdownStage(
     val androidContext = LocalContext.current
     var scriptText by remember { mutableStateOf<String?>(null) }
     var storyContext by remember { mutableStateOf<StoryContext?>(null) }
+
+    // 状态切换：0: 剧情播放中, 1: 剧情结束，转入 Still Alive 终端动画
+    var stagePhase by remember { mutableStateOf(0) }
 
     val isFinalExecution = localTime in 12.351f..13.160f
     val isShutdownOutro = localTime >= 13.160f
@@ -91,13 +95,24 @@ fun ShutdownStage(
                 modifier = Modifier.fillMaxSize()
             )
         } else {
-            // 黑屏时刻无缝衔接进入剧情播放
-            val script = scriptText
-            val context = storyContext
-            if (script != null && context != null) {
-                StoryPlayerScreen(
-                    scriptText = script,
-                    initialContext = context,
+            // 黑屏时刻无缝衔接剧情与 Still Alive 终端动画
+            if (stagePhase == 0) {
+                val script = scriptText
+                val context = storyContext
+                if (script != null && context != null) {
+                    StoryPlayerScreen(
+                        scriptText = script,
+                        initialContext = context,
+                        modifier = Modifier.fillMaxSize(),
+                        onFinished = {
+                            // 剧情结束后，无缝切换到 Still Alive 终端彩蛋画面
+                            stagePhase = 1
+                        }
+                    )
+                }
+            } else {
+                // 渲染传送门《Still Alive》终端动画与最后的蛋糕彩蛋
+                StillAliveScreen(
                     modifier = Modifier.fillMaxSize()
                 )
             }
