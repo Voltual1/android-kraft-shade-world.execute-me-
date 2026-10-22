@@ -74,7 +74,7 @@ fun ShutdownStage(
         shader.time = localTime
         shader.beatPulse = sceneState.beatPulse
         shader.progress = sceneState.progress
-        shader.isExecution = if (isExecution) 1.0f else 0.0f
+        shader.isFinalExecution = if (isExecution) 1.0f else 0.0f
 
         crtShader.time = localTime
         crtShader.glitchIntensity = if (sceneState.isGlitchActive) 0.8f else sceneState.beatPulse * 0.15f
