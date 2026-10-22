@@ -7,6 +7,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,7 +35,7 @@ import androidx.compose.ui.unit.sp
 import androidx.media3.common.MediaItem
 import androidx.media3.datasource.RawResourceDataSource
 import androidx.media3.exoplayer.ExoPlayer
-import coil3.compose.AsyncImage
+import coil3.compose.AsyncImage // Coil 3 import
 import com.jakewharton.mosaic.Mosaic
 
 @Composable
@@ -41,6 +43,7 @@ public fun StillAliveScreen(
 	modifier: Modifier = Modifier,
 	@RawRes rawAudioResId: Int = R.raw.mili_still_alive,
 	@DrawableRes cakeDrawableResId: Int = R.drawable.cake,
+	onCakeClicked: () -> Unit = {},
 ) {
 	val context = LocalContext.current
 	val scope = rememberCoroutineScope()
@@ -137,7 +140,7 @@ public fun StillAliveScreen(
 			)
 		}
 
-		// 播放完成后淡入展示 Coil 加载的蛋糕图片
+		// 播放完成后淡入展示 Coil 3 加载的蛋糕图片，点击后触发剧情播放
 		AnimatedVisibility(
 			visible = engine.isFinished,
 			enter = fadeIn(animationSpec = tween(durationMillis = 2000)),
@@ -147,7 +150,14 @@ public fun StillAliveScreen(
 			Box(
 				modifier = Modifier
 					.fillMaxSize()
-					.background(Color.Black),
+					.background(Color.Black)
+					.clickable(
+						interactionSource = remember { MutableInteractionSource() },
+						indication = null,
+					) {
+						exoPlayer.stop()
+						onCakeClicked()
+					},
 				contentAlignment = Alignment.Center,
 			) {
 				AsyncImage(

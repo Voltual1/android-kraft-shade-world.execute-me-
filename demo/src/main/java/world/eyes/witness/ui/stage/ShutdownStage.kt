@@ -38,7 +38,10 @@ fun ShutdownStage(
     var scriptText by remember { mutableStateOf<String?>(null) }
     var storyContext by remember { mutableStateOf<StoryContext?>(null) }
 
-    // 状态切换：0: 剧情播放中, 1: 剧情结束，转入 Still Alive 终端动画
+    // 状态切换：
+    // 0: 正常终端与 Still Alive 动画播放中
+    // 1: Still Alive 播放完毕并展示蛋糕，等待用户点击蛋糕
+    // 2: 用户点击蛋糕后，进入 StoryPlayerScreen 剧情播放
     var stagePhase by remember { mutableStateOf(0) }
 
     val isFinalExecution = localTime in 12.351f..13.160f
@@ -95,26 +98,29 @@ fun ShutdownStage(
                 modifier = Modifier.fillMaxSize()
             )
         } else {
-            // 黑屏时刻无缝衔接剧情与 Still Alive 终端动画
-            if (stagePhase == 0) {
-                val script = scriptText
-                val context = storyContext
-                if (script != null && context != null) {
-                    StoryPlayerScreen(
-                        scriptText = script,
-                        initialContext = context,
+            // 黑屏时刻：先播放 Still Alive 终端动画，播放完点击蛋糕后再进入剧情
+            when (stagePhase) {
+                0, 1 -> {
+                    StillAliveScreen(
                         modifier = Modifier.fillMaxSize(),
-                        onFinished = {
-                            // 剧情结束后，无缝切换到 Still Alive 终端彩蛋画面
-                            stagePhase = 1
+                        rawAudioResId = me.voltual.sa.R.raw.mili_still_alive,
+                        onCakeClicked = {
+                            // 用户点击蛋糕图片后，切换到阶段 2 播放故事剧情
+                            stagePhase = 2
                         }
                     )
                 }
-            } else {
-                // 渲染传送门《Still Alive》终端动画与最后的蛋糕彩蛋
-                StillAliveScreen(
-                    modifier = Modifier.fillMaxSize()
-                )
+                2 -> {
+                    val script = scriptText
+                    val context = storyContext
+                    if (script != null && context != null) {
+                        StoryPlayerScreen(
+                            scriptText = script,
+                            initialContext = context,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
             }
         }
     }
