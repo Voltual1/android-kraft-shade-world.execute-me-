@@ -22,6 +22,7 @@ import world.eyes.witness.director.SceneState
 import world.eyes.witness.shader.CrtTerminalKraftShader
 import world.eyes.witness.shader.ShutdownKraftShader
 import world.eyes.witness.timeline.TimelineSnapshot
+import kotlin.system.exitProcess
 
 @Composable
 fun ShutdownStage(
@@ -39,12 +40,11 @@ fun ShutdownStage(
     var storyContext by remember { mutableStateOf<StoryContext?>(null) }
 
     // 状态切换：
-    // 0: 正常终端与 Still Alive 动画播放中
-    // 1: Still Alive 播放完毕并展示蛋糕，等待用户点击蛋糕
-    // 2: 用户点击蛋糕后，进入 StoryPlayerScreen 剧情播放
+    // 0 / 1: 正常终端与 Still Alive 动画播放中，展示蛋糕
+    // 2: 点击蛋糕后进入 StoryPlayerScreen 剧情播放
     var stagePhase by remember { mutableStateOf(0) }
 
-    val isFinalExecution = localTime in 12.351f..13.160f
+    val isExecution = localTime in 12.351f..13.160f
     val isShutdownOutro = localTime >= 13.160f
 
     // 预加载本地故事剧本资源
@@ -74,7 +74,7 @@ fun ShutdownStage(
         shader.time = localTime
         shader.beatPulse = sceneState.beatPulse
         shader.progress = sceneState.progress
-        shader.isFinalExecution = if (isFinalExecution) 1.0f else 0.0f
+        shader.isExecution = if (isExecution) 1.0f else 0.0f
 
         crtShader.time = localTime
         crtShader.glitchIntensity = if (sceneState.isGlitchActive) 0.8f else sceneState.beatPulse * 0.15f
@@ -98,14 +98,13 @@ fun ShutdownStage(
                 modifier = Modifier.fillMaxSize()
             )
         } else {
-            // 黑屏时刻：先播放 Still Alive 终端动画，播放完点击蛋糕后再进入剧情
+            // 黑屏时刻：先播放 Still Alive 终端动画，播放完点击蛋糕后进入剧情，剧情结束直接 System.exit
             when (stagePhase) {
                 0, 1 -> {
                     StillAliveScreen(
                         modifier = Modifier.fillMaxSize(),
                         rawAudioResId = me.voltual.sa.R.raw.mili_still_alive,
                         onCakeClicked = {
-                            // 用户点击蛋糕图片后，切换到阶段 2 播放故事剧情
                             stagePhase = 2
                         }
                     )
@@ -117,7 +116,10 @@ fun ShutdownStage(
                         StoryPlayerScreen(
                             scriptText = script,
                             initialContext = context,
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier.fillMaxSize(),
+                            onFinished = {
+                                exitProcess(0)
+                            }
                         )
                     }
                 }
